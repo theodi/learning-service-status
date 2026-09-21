@@ -1,12 +1,13 @@
 <%- include('../partials/header') %>
 <main class="content-block" id="configure-root">
   <h1 class="page-title">Configure</h1>
-  <p class="page-lede">Set these on each app so it can push status. No Google login is required to push — auth is the shared ingest key only.</p>
+  <p class="page-lede">Client env for apps that push status, and the ingest IP allowlist. Pushing uses the shared ingest key (no Google). Localhost is always allowed.</p>
 
   <% if (!clientConfig.ingestKey) { %>
   <p class="empty">STATUS_INGEST_KEY is not set on this collector — pushes will fail until it is configured.</p>
   <% } else { %>
   <div class="client-config-body is-page">
+    <h2 class="config-heading">Client environment</h2>
     <dl class="config-fields">
       <div class="config-field">
         <dt>STATUS_REPORT_URL</dt>
@@ -39,6 +40,39 @@ STATUS_REPORT_KEY=••••••••</pre>
     <button type="button" class="config-copy" data-copy-env="config-env-snippet">Copy env block</button>
   </div>
   <% } %>
+
+  <div class="client-config-body is-page allowlist-panel">
+    <h2 class="config-heading">Ingest IP allowlist</h2>
+    <p class="allowlist-lede">
+      Only listed IPv4/IPv6 addresses may <code>POST /reports</code> (plus localhost).
+      Your current address: <code id="config-client-ip"><%= clientIp || 'unknown' %></code>
+      <% if (clientIp && clientIp !== '127.0.0.1' && clientIp !== '::1') { %>
+      <button type="button" class="config-copy" id="allowlist-add-mine">Allow this IP</button>
+      <% } %>
+    </p>
+    <p class="allowlist-note">Always allowed: <code>127.0.0.1</code>, <code>::1</code> (and IPv4-mapped localhost).</p>
+    <ul class="allowlist-ips" id="allowlist-ips">
+      <% (allowedIps || []).forEach(function (ip) { %>
+      <li data-ip="<%= ip %>">
+        <code><%= ip %></code>
+        <button type="button" class="config-copy allowlist-remove" data-remove-ip="<%= ip %>">Remove</button>
+      </li>
+      <% }) %>
+    </ul>
+    <% if (!(allowedIps || []).length) { %>
+    <p class="empty" id="allowlist-empty">No extra IPs yet — only localhost can push until you add addresses.</p>
+    <% } else { %>
+    <p class="empty" id="allowlist-empty" hidden>No extra IPs yet — only localhost can push until you add addresses.</p>
+    <% } %>
+    <form class="allowlist-form" id="allowlist-form">
+      <label>
+        Add IPv4 or IPv6 address
+        <input type="text" id="allowlist-input" name="ip" placeholder="203.0.113.10 or 2001:db8::1" autocomplete="off" spellcheck="false">
+      </label>
+      <button type="submit" class="config-copy">Add</button>
+    </form>
+    <p class="allowlist-status" id="allowlist-status" role="status" aria-live="polite"></p>
+  </div>
 </main>
 <%- include('../partials/footer') %>
 <script src="/js/configure.js"></script>

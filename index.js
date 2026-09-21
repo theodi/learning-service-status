@@ -22,6 +22,12 @@ const { startSelfReporter } = require('./lib/selfReport');
 const { enrichReportWithRuntime } = require('./lib/enrichRuntime');
 const { renderSimpleMarkdown } = require('./lib/simpleMarkdown');
 const { streamClientNodeZip } = require('./lib/clientZip');
+const { createSettingsStore } = require('./lib/settingsStore');
+const {
+  isIpAllowed,
+  requestClientIp,
+  normalizeAllowlist,
+} = require('./lib/allowedIps');
 
 const root = __dirname;
 const configEnvPath = path.join(root, 'config.env');
@@ -59,9 +65,12 @@ const EXPECTED_SERVICES = withSelfExpected(
 );
 const STORE_PATH =
   process.env.REPORTS_STORE_PATH || path.join(root, 'data', 'reports.json');
+const SETTINGS_PATH =
+  process.env.SETTINGS_STORE_PATH || path.join(root, 'data', 'settings.json');
 const isProduction = process.env.NODE_ENV === 'production';
 
 const store = createStore(STORE_PATH);
+const settingsStore = createSettingsStore(SETTINGS_PATH);
 const passport = configurePassport();
 
 const app = express();
@@ -69,6 +78,11 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(root, 'views'));
 app.use(expressLayouts);
 app.set('layout', 'layout');
+
+// Honour X-Forwarded-For when behind a reverse proxy (set TRUST_PROXY=1)
+if (process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true') {
+  app.set('trust proxy', 1);
+}
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false }));
@@ -176,6 +190,7 @@ app.get('/', requireAuthHtml, (req, res) => {
 
 app.get('/configure', requireAuthHtml, (req, res) => {
   const base = publicBaseUrl(req);
+  const settings = settingsStore.get();
   res.locals.page = { title: 'Configure — Service status' };
   res.locals.navActive = 'configure';
   res.render('pages/configure', {
@@ -183,6 +198,31 @@ app.get('/configure', requireAuthHtml, (req, res) => {
       reportUrl: `${base}/reports`,
       ingestKey: INGEST_KEY,
     },
+    allowedIps: settings.allowedIps,
+    clientIp: requestClientIp(req),
+  });
+});
+
+/** Staff settings (allowlist) — JSON only. */
+app.get('/settings', requireAuthJson, (req, res) => {
+  const settings = settingsStore.get();
+  res.json({
+    allowedIps: settings.allowedIps,
+    localhostAlwaysAllowed: true,
+  });
+});
+
+app.put('/settings', requireAuthJson, (req, res) => {
+  const body = req.body || {};
+  const normalized = normalizeAllowlist(body.allowedIps != null ? body.allowedIps : []);
+  if (!normalized.ok) {
+    return res.status(400).json({ error: normalized.error });
+  }
+  const saved = settingsStore.setAllowedIps(normalized.ips);
+  return res.json({
+    ok: true,
+    allowedIps: saved.allowedIps,
+    localhostAlwaysAllowed: true,
   });
 });
 
@@ -216,6 +256,16 @@ app.get('/reports', requireAuthJson, (req, res) => {
 });
 
 app.post('/reports', async (req, res) => {
+  const clientIp = requestClientIp(req);
+  const { allowedIps } = settingsStore.get();
+  if (!isIpAllowed(clientIp, allowedIps)) {
+    console.warn('[ingest] rejected IP', clientIp || '(unknown)');
+    return res.status(403).json({
+      error: 'Forbidden: client IP is not on the ingest allowlist',
+      ip: clientIp || null,
+    });
+  }
+
   if (!INGEST_KEY) {
     return res.status(500).json({ error: 'STATUS_INGEST_KEY is not configured on the collector' });
   }

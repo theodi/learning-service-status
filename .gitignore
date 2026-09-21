@@ -7,4 +7,5 @@
 config.env
 data/*.tmp
 data/reports.json
+data/settings.json
 node_modules/

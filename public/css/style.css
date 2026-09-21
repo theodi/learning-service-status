@@ -293,6 +293,78 @@ code {
   background: var(--bg-muted);
 }
 
+.config-heading {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+  color: var(--heading);
+}
+
+.allowlist-panel {
+  margin-top: 1.5rem;
+}
+
+.allowlist-lede,
+.allowlist-note {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  margin: 0 0 0.75rem;
+}
+
+.allowlist-ips {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+
+.allowlist-ips li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.allowlist-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: flex-end;
+  margin-bottom: 0.5rem;
+}
+
+.allowlist-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  flex: 1 1 14rem;
+}
+
+.allowlist-form input {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: 1rem;
+  font-family: inherit;
+  border-radius: 0;
+}
+
+.allowlist-status {
+  min-height: 1.25rem;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.allowlist-status.is-error {
+  color: var(--status-fail-bg);
+}
+
 .login-panel .lede {
   color: var(--text-muted);
   margin-bottom: 1.5rem;

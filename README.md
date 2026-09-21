@@ -29,6 +29,8 @@ Google Cloud OAuth client: authorised redirect URI must match `GOOGLE_CALLBACK_U
 | `EXPECTED_SERVICES` | Comma-separated service ids always shown |
 | `SELF_REPORT_INTERVAL_MS` | How often this app upserts its own report |
 | `REPORTS_STORE_PATH` | JSON persistence path |
+| `SETTINGS_STORE_PATH` | Allowlist settings path (default `./data/settings.json`) |
+| `TRUST_PROXY` | Set `1` / `true` to honour `X-Forwarded-For` for ingest IP checks |
 | `SESSION_SECRET` | Express session secret |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth |
 | `GOOGLE_CALLBACK_URL` | OAuth callback URL |
@@ -40,7 +42,9 @@ Google Cloud OAuth client: authorised redirect URI must match `GOOGLE_CALLBACK_U
 |-------|------|---------|
 | `POST /reports` | ingest key | Client push (collector enriches LTS from `runtime`) |
 | `GET /` | Google + `@theodi.org` | Dashboard |
-| `GET /configure` | Google + `@theodi.org` | Ingest URL + key for clients |
+| `GET /configure` | Google + `@theodi.org` | Ingest URL + key + IP allowlist |
+| `GET /settings` | Google + `@theodi.org` | JSON settings (allowlist) |
+| `PUT /settings` | Google + `@theodi.org` | Update allowlist `{ "allowedIps": [...] }` |
 | `GET /reports` | Google + `@theodi.org` | JSON for UI refresh |
 | `GET /docs` | public | Integration guide |
 | `GET /docs/agent` | public | Agent playbook |

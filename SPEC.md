@@ -18,6 +18,9 @@ Requires a shared secret (not Google):
 | 200 | Accepted |
 | 400 | Invalid body |
 | 401 | Missing or wrong key |
+| 403 | Client IP not on the ingest allowlist |
+
+Staff configure an IPv4/IPv6 allowlist on `/configure` (stored in `data/settings.json`). **Localhost** (`127.0.0.1`, `::1`, and IPv4-mapped localhost) is always allowed. An empty allowlist means only localhost may push. Set `TRUST_PROXY=1` behind a reverse proxy so the client IP is taken from `X-Forwarded-For`.
 
 ### Dashboard (`GET /`, `GET /configure`, `GET /reports`)
 
