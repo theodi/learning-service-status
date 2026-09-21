@@ -30,7 +30,6 @@ Google Cloud OAuth client: authorised redirect URI must match `GOOGLE_CALLBACK_U
 | `SELF_REPORT_INTERVAL_MS` | How often this app upserts its own report |
 | `REPORTS_STORE_PATH` | JSON persistence path |
 | `SETTINGS_STORE_PATH` | Allowlist settings path (default `./data/settings.json`) |
-| `TRUST_PROXY` | Set `1` / `true` to honour `X-Forwarded-For` for ingest IP checks |
 | `SESSION_SECRET` | Express session secret |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth |
 | `GOOGLE_CALLBACK_URL` | OAuth callback URL |

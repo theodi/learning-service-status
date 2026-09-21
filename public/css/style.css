@@ -310,6 +310,10 @@ code {
   margin: 0 0 0.75rem;
 }
 
+.allowlist-note.warn {
+  color: var(--fail);
+}
+
 .allowlist-ips {
   list-style: none;
   margin: 0 0 1rem;

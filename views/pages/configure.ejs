@@ -51,6 +51,7 @@ STATUS_REPORT_KEY=••••••••</pre>
       <% } %>
     </p>
     <p class="allowlist-note">Always allowed: <code>127.0.0.1</code>, <code>::1</code> (and IPv4-mapped localhost).</p>
+    <p class="allowlist-note">Behind Cloudflare, ingest uses <code>CF-Connecting-IP</code> automatically when the TCP peer is a Cloudflare edge IP — allowlist each pusher’s real egress address, not a <code>141.101.*</code> (etc.) edge.</p>
     <ul class="allowlist-ips" id="allowlist-ips">
       <% (allowedIps || []).forEach(function (ip) { %>
       <li data-ip="<%= ip %>">

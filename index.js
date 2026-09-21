@@ -28,6 +28,7 @@ const {
   isIpAllowed,
   requestClientIp,
   normalizeAllowlist,
+  expressTrustProxy,
 } = require('./lib/allowedIps');
 
 const root = __dirname;
@@ -80,10 +81,8 @@ app.set('views', path.join(root, 'views'));
 app.use(expressLayouts);
 app.set('layout', 'layout');
 
-// Honour X-Forwarded-For when behind a reverse proxy (set TRUST_PROXY=1)
-if (process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true') {
-  app.set('trust proxy', 1);
-}
+// Trust X-Forwarded-For / proto only when the TCP peer is a Cloudflare edge IP.
+app.set('trust proxy', expressTrustProxy);
 
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: false }));
@@ -264,6 +263,7 @@ app.post('/reports', async (req, res) => {
     return res.status(403).json({
       error: 'Forbidden: client IP is not on the ingest allowlist',
       ip: clientIp || null,
+      hint: 'Allowlist this host’s egress IP. Via Cloudflare, that is CF-Connecting-IP (not a Cloudflare edge address).',
     });
   }
 

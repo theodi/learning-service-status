@@ -9,6 +9,9 @@ const {
   isIpAllowed,
   parseAllowlistEntry,
   normalizeAllowlist,
+  requestClientIp,
+  expressTrustProxy,
+  isCloudflareIp,
 } = require('../lib/allowedIps');
 const { createSettingsStore } = require('../lib/settingsStore');
 
@@ -45,6 +48,42 @@ describe('allowedIps', () => {
     const out = normalizeAllowlist(['203.0.113.5', '203.0.113.5', '2001:db8::1']);
     assert.equal(out.ok, true);
     assert.deepEqual(out.ips, ['203.0.113.5', '2001:db8::1']);
+  });
+
+  it('detects Cloudflare edge ranges', () => {
+    assert.equal(isCloudflareIp('141.101.98.212'), true);
+    assert.equal(isCloudflareIp('104.16.0.1'), true);
+    assert.equal(isCloudflareIp('104.248.167.139'), false);
+    assert.equal(isCloudflareIp('127.0.0.1'), false);
+    assert.equal(isCloudflareIp('2606:4700::1'), true);
+  });
+
+  it('expressTrustProxy only trusts Cloudflare peers', () => {
+    assert.equal(expressTrustProxy('141.101.98.212'), true);
+    assert.equal(expressTrustProxy('203.0.113.10'), false);
+  });
+
+  it('requestClientIp uses CF-Connecting-IP only when peer is Cloudflare', () => {
+    const req = {
+      get(name) {
+        if (name.toLowerCase() === 'cf-connecting-ip') return '104.248.167.139';
+        if (name.toLowerCase() === 'x-forwarded-for') return '203.0.113.1';
+        return undefined;
+      },
+      socket: { remoteAddress: '141.101.98.212' },
+    };
+    assert.equal(requestClientIp(req), '104.248.167.139');
+  });
+
+  it('requestClientIp ignores spoofed CF headers from non-Cloudflare peers', () => {
+    const req = {
+      get(name) {
+        if (name.toLowerCase() === 'cf-connecting-ip') return '104.248.167.139';
+        return undefined;
+      },
+      socket: { remoteAddress: '203.0.113.50' },
+    };
+    assert.equal(requestClientIp(req), '203.0.113.50');
   });
 });
 
