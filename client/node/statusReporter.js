@@ -72,9 +72,12 @@ async function reportOnce(options = {}) {
         version: options.version,
         instance: options.instance,
         runtime: options.runtime,
+        dependencies: options.dependencies,
         checks: options.checks,
         getChecks: options.getChecks,
         includeRuntime: options.includeRuntime,
+        includeDependencies: options.includeDependencies,
+        cwd: options.cwd,
         env: options.env,
       }));
   } catch (err) {

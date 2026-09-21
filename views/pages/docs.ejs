@@ -14,9 +14,9 @@
   <section class="docs-section">
     <h2>How it works</h2>
     <ol>
-      <li>Each app builds a JSON report with a stable <code>service</code> id, required <code>runtime</code> versions, required <code>npm_audit</code>, and probes for external integrations.</li>
+      <li>Each app builds a JSON report with a stable <code>service</code> id, required <code>runtime</code> versions, required <code>dependencies</code> (lockfiles), and probes for external integrations.</li>
       <li>The app POSTs to <code>/reports</code> with the shared ingest key (no Google login).</li>
-      <li>This collector scores Node/OS LTS from <code>runtime</code> and shows the fleet on the staff dashboard.</li>
+      <li>This collector scores Node/OS LTS and audits lockfiles in-process (Arborist), then shows the fleet on the staff dashboard.</li>
     </ol>
   </section>
 
@@ -25,9 +25,9 @@
     <ul>
       <li><strong>Node version</strong> — <code>runtime.node</code> (sample client sends this automatically)</li>
       <li><strong>OS version</strong> — <code>runtime.os</code> (automatic)</li>
-      <li><strong>npm audit</strong> — <code>checks</code> entry <code>id: "npm_audit"</code> via <code>npmAuditCheck()</code></li>
+      <li><strong>Lockfiles</strong> — <code>dependencies.packageJson</code> + <code>dependencies.packageLock</code> (read from disk). Collector audits in-process (Arborist). <strong>No <code>npm</code> binary needed</strong> in the app or on the collector host beyond Node.</li>
     </ul>
-    <p>The collector evaluates LTS/EOL for Node and OS. Apps must not call endoflife.date.</p>
+    <p>The collector evaluates LTS/EOL and dependency advisories. Apps do not call endoflife.date or <code>npm audit</code>.</p>
   </section>
 
   <section class="docs-section">
@@ -51,16 +51,16 @@
       <li><a href="/client/odi-status-node.zip">odi-status-node.zip</a></li>
       <li>Browse source: <a href="/client/node/">/client/node/</a></li>
     </ul>
-    <pre class="config-snippet">const { startStatusReporter, npmAuditCheck } = require('./lib/odi-status');
+    <pre class="config-snippet">const { startStatusReporter } = require('./lib/odi-status');
 
 startStatusReporter({
   service: 'my-service-id',
   version: require('./package.json').version,
+  cwd: __dirname,
   getChecks: async () => [
     await checkMongo(),      // example — your integrations
     await checkHubspot(),
     await checkEmail(),
-    await npmAuditCheck({ cwd: __dirname }), // required
   ],
 });</pre>
     <p>Environment (staff get the real values from <strong>Configure</strong> after sign-in):</p>

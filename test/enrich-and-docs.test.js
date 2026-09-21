@@ -6,6 +6,11 @@ const fs = require('fs');
 const os = require('os');
 
 const { enrichReportWithRuntime, runtimeOsToOsInfo } = require('../lib/enrichRuntime');
+const {
+  enrichReportWithNpmAudit,
+  clearNpmAuditCache,
+  npmAuditToCheck,
+} = require('../lib/enrichNpmAudit');
 const { clearEolCache } = require('../lib/runtimeSupportChecks');
 const { createStore } = require('../lib/store');
 const { validateReport } = require('../lib/validateReport');
@@ -90,7 +95,7 @@ describe('enrichReportWithRuntime', () => {
     assert.equal(enriched.checks[0].status, 'warn');
   });
 
-  it('warns when runtime and npm_audit are missing', async () => {
+  it('warns when runtime is missing (npm_audit handled separately)', async () => {
     const enriched = await enrichReportWithRuntime({
       service: 'demo',
       checks: [{ id: 'up', name: 'Up', status: 'ok', message: 'yes' }],
@@ -105,11 +110,112 @@ describe('enrichReportWithRuntime', () => {
         (c) => c.id === 'operating_system' && c.status === 'warn' && /required/.test(c.message)
       )
     );
+    assert.ok(!enriched.checks.some((c) => c.id === 'npm_audit'));
+  });
+});
+
+describe('enrichReportWithNpmAudit', () => {
+  after(() => {
+    clearNpmAuditCache();
+  });
+
+  it('scores audit JSON via npmAuditToCheck', () => {
+    const fail = npmAuditToCheck({
+      metadata: {
+        vulnerabilities: { info: 0, low: 0, moderate: 0, high: 2, critical: 0, total: 2 },
+      },
+    });
+    assert.equal(fail.status, 'fail');
+    const ok = npmAuditToCheck({
+      metadata: {
+        vulnerabilities: { info: 0, low: 0, moderate: 0, high: 0, critical: 0, total: 0 },
+      },
+    });
+    assert.equal(ok.status, 'ok');
+  });
+
+  it('injects collector audit from dependencies (mocked)', async () => {
+    clearNpmAuditCache();
+    const enriched = await enrichReportWithNpmAudit(
+      {
+        service: 'demo',
+        dependencies: {
+          packageJson: { name: 'demo', version: '1.0.0' },
+          packageLock: { lockfileVersion: 3, packages: {} },
+        },
+        checks: [{ id: 'up', name: 'Up', status: 'ok', message: 'yes' }],
+      },
+      {
+        useCache: false,
+        auditCheck: {
+          id: 'npm_audit',
+          name: 'npm audit',
+          status: 'ok',
+          message: '0 vulnerabilities',
+          detail: { source: 'collector', total: 0 },
+        },
+      }
+    );
+    const audit = enriched.checks.find((c) => c.id === 'npm_audit');
+    assert.ok(audit);
+    assert.equal(audit.status, 'ok');
+    assert.equal(audit.detail.source, 'collector');
+    assert.ok(enriched.checks.some((c) => c.id === 'up'));
+  });
+
+  it('runs mocked in-process audit and injects scored check', async () => {
+    clearNpmAuditCache();
+    const auditFn = async () => ({
+      metadata: {
+        vulnerabilities: { info: 0, low: 1, moderate: 0, high: 0, critical: 0, total: 1 },
+      },
+    });
+    const enriched = await enrichReportWithNpmAudit(
+      {
+        service: 'demo',
+        dependencies: {
+          packageJson: { name: 'demo', version: '1.0.0' },
+          packageLock: { lockfileVersion: 3, packages: { '': {} } },
+        },
+        checks: [],
+      },
+      { auditFn, useCache: false }
+    );
+    const audit = enriched.checks.find((c) => c.id === 'npm_audit');
+    assert.equal(audit.status, 'warn');
+    assert.equal(audit.detail.source, 'collector');
+    assert.equal(audit.detail.engine, 'arborist');
+    assert.equal(audit.detail.low, 1);
+  });
+
+  it('warns when dependencies missing', async () => {
+    const enriched = await enrichReportWithNpmAudit({
+      service: 'demo',
+      checks: [{ id: 'up', name: 'Up', status: 'ok', message: 'yes' }],
+    });
     assert.ok(
       enriched.checks.some(
-        (c) => c.id === 'npm_audit' && c.status === 'warn' && /required/.test(c.message)
+        (c) => c.id === 'npm_audit' && c.status === 'warn' && /dependencies/.test(c.message)
       )
     );
+  });
+
+  it('preserves legacy client npm_audit when no dependencies', async () => {
+    const enriched = await enrichReportWithNpmAudit({
+      service: 'demo',
+      checks: [
+        {
+          id: 'npm_audit',
+          name: 'npm audit',
+          status: 'fail',
+          message: '1 high',
+          detail: { high: 1 },
+        },
+      ],
+    });
+    const audit = enriched.checks.find((c) => c.id === 'npm_audit');
+    assert.equal(audit.status, 'fail');
+    assert.equal(audit.message, '1 high');
   });
 });
 
@@ -134,6 +240,8 @@ describe('public docs and client routes', () => {
     const expressLayouts = require('express-ejs-layouts');
     const { renderSimpleMarkdown } = require('../lib/simpleMarkdown');
     const { streamClientNodeZip } = require('../lib/clientZip');
+    const { enrichReportWithRuntime } = require('../lib/enrichRuntime');
+    const { enrichReportWithNpmAudit } = require('../lib/enrichNpmAudit');
     const { extractIngestKey } = require('../lib/validateReport');
 
     const root = path.join(__dirname, '..');
@@ -142,7 +250,7 @@ describe('public docs and client routes', () => {
     app.set('views', path.join(root, 'views'));
     app.use(expressLayouts);
     app.set('layout', 'layout');
-    app.use(express.json());
+    app.use(express.json({ limit: '5mb' }));
     app.use((req, res, next) => {
       res.locals.user = null;
       res.locals.formatAge = () => '';
@@ -173,12 +281,24 @@ describe('public docs and client routes', () => {
       if (key !== 'test-ingest-key') return res.status(401).json({ error: 'Unauthorized' });
       const validated = validateReport(req.body);
       if (!validated.ok) return res.status(400).json({ error: validated.error });
-      const report = await enrichReportWithRuntime(validated.report, {
+      let report = await enrichReportWithRuntime(validated.report, {
         now: new Date('2026-09-21T12:00:00.000Z'),
         nodeCycles: [
           { cycle: '22', lts: '2024-10-29', eol: '2027-04-30', latest: '22.23.2' },
         ],
         osCycles: [{ cycle: '24.04', lts: true, eol: '2029-04-25' }],
+      });
+      report = await enrichReportWithNpmAudit(report, {
+        useCache: false,
+        auditCheck: req.body.dependencies
+          ? {
+              id: 'npm_audit',
+              name: 'npm audit',
+              status: 'ok',
+              message: '0 vulnerabilities',
+              detail: { source: 'collector', total: 0 },
+            }
+          : undefined,
       });
       const receivedAt = new Date().toISOString();
       store.upsert(report.service, report, receivedAt);
@@ -284,7 +404,7 @@ describe('public docs and client routes', () => {
     assert.ok(res.body.length > 100);
   });
 
-  it('POST /reports enriches runtime into checks', async () => {
+  it('POST /reports enriches runtime and npm audit from lockfiles', async () => {
     const res = await postJson(
       '/reports',
       {
@@ -293,10 +413,11 @@ describe('public docs and client routes', () => {
           node: 'v22.23.2',
           os: { id: 'ubuntu', versionId: '24.04', prettyName: 'Ubuntu 24.04 LTS' },
         },
-        checks: [
-          { id: 'npm_audit', name: 'npm audit', status: 'ok', message: '0 vulnerabilities' },
-          { id: 'up', name: 'Up', status: 'ok', message: 'yes' },
-        ],
+        dependencies: {
+          packageJson: { name: 'enrich-demo', version: '1.0.0' },
+          packageLock: { lockfileVersion: 3, packages: {} },
+        },
+        checks: [{ id: 'up', name: 'Up', status: 'ok', message: 'yes' }],
       },
       { Authorization: 'Bearer test-ingest-key' }
     );
@@ -308,5 +429,6 @@ describe('public docs and client routes', () => {
     assert.ok(ids.includes('up'));
     assert.ok(ids.includes('npm_audit'));
     assert.equal(res.json.checks.find((c) => c.id === 'node_runtime').status, 'ok');
+    assert.equal(res.json.checks.find((c) => c.id === 'npm_audit').detail.source, 'collector');
   });
 });

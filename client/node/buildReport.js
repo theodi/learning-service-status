@@ -1,9 +1,11 @@
 /**
- * Assemble a SPEC report. App-owned checks come from getChecks(); runtime is versions only.
+ * Assemble a SPEC report. App-owned checks from getChecks(); runtime + lockfiles for collector.
  */
 
 const os = require('os');
+const path = require('path');
 const { detectRuntime } = require('./detectRuntime');
+const { readDependencies } = require('./readDependencies');
 
 /**
  * @param {{
@@ -11,9 +13,12 @@ const { detectRuntime } = require('./detectRuntime');
  *   version?: string,
  *   instance?: string,
  *   runtime?: object,
+ *   dependencies?: object,
  *   checks?: object[],
  *   getChecks?: () => object[]|Promise<object[]>,
  *   includeRuntime?: boolean,
+ *   includeDependencies?: boolean,
+ *   cwd?: string,
  *   env?: NodeJS.ProcessEnv,
  * }} options
  */
@@ -48,6 +53,14 @@ async function buildReport(options = {}) {
 
   if (options.includeRuntime !== false) {
     report.runtime = options.runtime || detectRuntime(options);
+  }
+
+  if (options.includeDependencies !== false) {
+    report.dependencies =
+      options.dependencies ||
+      readDependencies({ cwd: options.cwd || process.cwd() }) ||
+      undefined;
+    if (!report.dependencies) delete report.dependencies;
   }
 
   return report;

@@ -46,6 +46,10 @@ Staff-only. Google OAuth; email host must be `theodi.org` (same rule as CARE adm
       "prettyName": "Ubuntu 22.04.4 LTS"
     }
   },
+  "dependencies": {
+    "packageJson": { "name": "care.theodi.org", "version": "3.0.0" },
+    "packageLock": { "lockfileVersion": 3, "packages": {} }
+  },
   "checks": [
     {
       "id": "mongo",
@@ -53,13 +57,6 @@ Staff-only. Google OAuth; email host must be `theodi.org` (same rule as CARE adm
       "status": "ok",
       "message": "connected (care)",
       "detail": {}
-    },
-    {
-      "id": "npm_audit",
-      "name": "npm audit",
-      "status": "ok",
-      "message": "0 vulnerabilities",
-      "detail": { "total": 0 }
     }
   ]
 }
@@ -74,7 +71,10 @@ Staff-only. Google OAuth; email host must be `theodi.org` (same rule as CARE adm
 | `reportedAt` | no | ISO-8601 when the client built the report. Collector also stores `receivedAt`. |
 | `instance` | no | Host, region, or process id when useful. |
 | `runtime` | **yes (Node)** | Raw versions only. Must include `node` and `os`. Collector scores LTS/EOL and injects `node_runtime` / `operating_system`. |
-| `checks` | yes | App-owned tests. For Node services **must** include `npm_audit`. |
+| `dependencies` | **yes (Node)** | `packageJson` + `packageLock` (npm). Collector runs `npm audit` and injects `npm_audit`. Apps do **not** need the `npm` binary. |
+| `checks` | yes | App-owned tests (connections, integrations). Do **not** require client-side `npm_audit`. |
+
+JSON body limit for ingest is **5mb** (lockfiles can be large).
 
 ### `runtime` object (required on Node services)
 
@@ -82,6 +82,15 @@ Staff-only. Google OAuth; email host must be `theodi.org` (same rule as CARE adm
 |-------|----------|--------|
 | `node` | yes | Node version string (e.g. `v20.11.1` or `20.11.1`). |
 | `os` | yes | Object: `id` (os-release `ID`), `versionId` (`VERSION_ID`), `prettyName` (`PRETTY_NAME`). Optional `product` / `platform` / `release` help the collector. |
+
+### `dependencies` object (required on Node / npm services)
+
+| Field | Required | Notes |
+|-------|----------|--------|
+| `packageJson` | yes | Object or UTF-8 JSON string — contents of `package.json`. |
+| `packageLock` | yes | Object or UTF-8 JSON string — contents of `package-lock.json` (or npm-shrinkwrap). |
+
+Yarn / pnpm lockfiles are out of scope for this collector path.
 
 ### Check object
 
@@ -93,15 +102,17 @@ Staff-only. Google OAuth; email host must be `theodi.org` (same rule as CARE adm
 | `message` | yes | Short human-readable outcome. |
 | `detail` | no | Arbitrary JSON for machine consumers (counts, codes). |
 
-## Required checks (every Node service)
+## Required on every Node service
 
 | Requirement | How |
 |-------------|-----|
 | Node version | `runtime.node` → collector injects `node_runtime` |
 | OS version | `runtime.os` → collector injects `operating_system` |
-| Dependency audit | `checks[]` entry with `id: "npm_audit"` (sample client: `npmAuditCheck()`) |
+| Dependency audit | `dependencies.packageJson` + `dependencies.packageLock` → collector injects `npm_audit` (in-process via `@npmcli/arborist`; no `npm` binary) |
 
-If a Node report is missing `runtime` pieces or `npm_audit`, the collector still accepts the push but injects **warn** placeholders so the dashboard shows the gap.
+Clients under `www-data` should **read** lockfiles from disk and send them — they must not run `npm audit` themselves. The collector also does not need a system `npm` binary (Arborist is a dependency).
+
+If `runtime` or `dependencies` is missing, the collector still accepts the push but injects **warn** placeholders. Legacy: if `dependencies` is omitted but the client already sent a scored `npm_audit` check, that check is kept.
 
 ## What else to check (app-owned)
 
@@ -144,7 +155,7 @@ Configure `EXPECTED_SERVICES` (comma-separated) so services that never phone hom
 
 ## Collector self-reporting
 
-The collector upserts its own report (`service`: `service-status`) on an interval (`SELF_REPORT_INTERVAL_MS`), including process uptime, `runtime` (scored on ingest/self-upsert), ingest key presence, store writability, expected-services config, fleet activity, and `npm audit`. One-shot: `npm run report-status`.
+The collector upserts its own report (`service`: `service-status`) on an interval (`SELF_REPORT_INTERVAL_MS`), including process uptime, `runtime` and `dependencies` (scored on upsert), ingest key presence, store writability, expected-services config, and fleet activity. One-shot: `npm run report-status`.
 
 ## Client guidance
 
@@ -152,7 +163,8 @@ The collector upserts its own report (`service`: `service-status`) on an interva
 - Never crash the app if the collector is down; log a warning.
 - Do **not** expose a public status URI as the monitoring plane (local k8s `/health` for orchestration is fine separately).
 - Prefer push over inventing a pull-only monitoring API.
-- **Required:** `runtime` (node + os) and `npm_audit`, plus probes for every external integration the app depends on.
+- **Required:** `runtime` (node + os) and `dependencies` (`package.json` + `package-lock.json` contents), plus probes for every external integration the app depends on.
+- Do **not** require the `npm` binary in the app or collector process (Arborist audits lockfiles in-process).
 - Use the public sample client: `/client/node/` or `/client/odi-status-node.zip`.
 
 ## Reference client

@@ -9,7 +9,7 @@ Push self-describing health checks to the central collector. Do **not** invent a
 ## Required on every Node service
 
 1. **`runtime.node` + `runtime.os`** — sample client sends these automatically; collector scores LTS.
-2. **`npm_audit` check** — always call `npmAuditCheck()` in `getChecks`.
+2. **`dependencies`** — `package.json` + `package-lock.json` contents (read from disk). Collector audits lockfiles in-process (Arborist). **No `npm` binary needed** in the app (www-data safe).
 3. **External integrations** — every dependency that can fail outside the process (DB, email, HubSpot, AI, Django/upstream APIs, queues, storage, payments, OAuth, …). Prefer a real probe over “env var is set”.
 
 ## Steps
@@ -18,20 +18,19 @@ Push self-describing health checks to the central collector. Do **not** invent a
 2. **Wire** after `app.listen` (or equivalent):
 
 ```js
-const { startStatusReporter, npmAuditCheck } = require('./lib/odi-status');
+const { startStatusReporter } = require('./lib/odi-status');
 const pkg = require('../package.json');
 
 startStatusReporter({
   service: 'my-service-id', // stable id
   version: pkg.version,
+  cwd: __dirname + '/..', // so package-lock.json is found
   getChecks: async () => {
     const checks = [];
     // External integrations used by THIS app (examples — keep only what applies):
     // checks.push(await checkMongo());
     // checks.push(await checkEmail());
     // checks.push(await checkHubspot());
-    // checks.push(await checkAiProvider());
-    checks.push(await npmAuditCheck({ cwd: __dirname + '/..' })); // required
     return checks;
   },
 });
@@ -47,13 +46,13 @@ STATUS_REPORT_INTERVAL_MS=300000
 
 If URL or key unset → reporter is a no-op.
 
-4. **Runtime**: leave default `includeRuntime` on. Do not call endoflife.date in the app.
+4. **Runtime + lockfiles**: leave defaults on. Do not call endoflife.date or `npm audit` in the app.
 
 5. **Extend**: return `{ id, name, status, message, detail? }` from `getChecks`. Status must be `ok|warn|fail`.
 
 6. **CLI** (optional): `node lib/odi-status/scripts/report-status.js --service=my-service-id`
 
-7. **Accept**: HTTP 200; dashboard shows `node_runtime`, `operating_system`, `npm_audit`, and this app’s integration checks.
+7. **Accept**: HTTP 200; dashboard shows `node_runtime`, `operating_system`, `npm_audit` (collector-scored), and this app’s integration checks.
 
 ## Anti-patterns
 
@@ -61,5 +60,6 @@ If URL or key unset → reporter is a no-op.
 - Crashing the app when the collector is down
 - Scraping Prometheus as a substitute for this push
 - Putting `STATUS_REPORT_KEY` in public docs or git
-- Omitting `npm_audit` or `runtime`
+- Omitting `runtime` or `dependencies` (lockfiles)
+- Requiring `npm` in the app process for audit
 - Only checking that an API key env var exists without probing the provider

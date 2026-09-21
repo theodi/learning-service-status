@@ -20,6 +20,7 @@ const { requireAuthHtml, requireAuthJson, isOdiStaffEmail } = require('./lib/odi
 const { configurePassport, isGoogleConfigured } = require('./lib/passport');
 const { startSelfReporter } = require('./lib/selfReport');
 const { enrichReportWithRuntime } = require('./lib/enrichRuntime');
+const { enrichReportWithNpmAudit } = require('./lib/enrichNpmAudit');
 const { renderSimpleMarkdown } = require('./lib/simpleMarkdown');
 const { streamClientNodeZip } = require('./lib/clientZip');
 const { createSettingsStore } = require('./lib/settingsStore');
@@ -84,7 +85,7 @@ if (process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true') {
   app.set('trust proxy', 1);
 }
 
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: false }));
 app.use(express.static(path.join(root, 'public')));
 app.use('/client/node', express.static(path.join(root, 'client', 'node')));
@@ -282,8 +283,9 @@ app.post('/reports', async (req, res) => {
   let report;
   try {
     report = await enrichReportWithRuntime(validated.report);
+    report = await enrichReportWithNpmAudit(report);
   } catch (err) {
-    console.warn('[ingest] runtime enrichment failed:', err.message || err);
+    console.warn('[ingest] enrichment failed:', err.message || err);
     report = validated.report;
   }
 

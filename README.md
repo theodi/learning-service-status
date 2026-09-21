@@ -4,7 +4,7 @@ Central push collector and ODI-staff dashboard for the [service status conventio
 
 **Public integration:** [`/docs`](http://localhost:3090/docs) (agent playbook, SPEC, downloadable Node client). Staff sign-in is only for the dashboard and Configure (ingest key).
 
-Services POST self-describing check reports with an ingest key. The collector scores **Node.js / OS LTS** from the report’s `runtime` field (endoflife.date). Staff (`@theodi.org`) view the fleet after Google sign-in.
+Services POST self-describing check reports with an ingest key. The collector scores **Node.js / OS LTS** from `runtime` and audits uploaded lockfiles (`dependencies`) **in-process** with `@npmcli/arborist` (no system `npm` binary). Staff (`@theodi.org`) view the fleet after Google sign-in.
 
 ## Quick start
 
@@ -40,7 +40,7 @@ Google Cloud OAuth client: authorised redirect URI must match `GOOGLE_CALLBACK_U
 
 | Route | Auth | Purpose |
 |-------|------|---------|
-| `POST /reports` | ingest key | Client push (collector enriches LTS from `runtime`) |
+| `POST /reports` | ingest key | Client push (collector enriches LTS + npm audit from lockfiles; JSON body up to 5mb) |
 | `GET /` | Google + `@theodi.org` | Dashboard |
 | `GET /configure` | Google + `@theodi.org` | Ingest URL + key + IP allowlist |
 | `GET /settings` | Google + `@theodi.org` | JSON settings (allowlist) |

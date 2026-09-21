@@ -53,6 +53,41 @@ describe('validateReport', () => {
     });
     assert.equal(out.ok, false);
   });
+
+  it('accepts dependencies as objects', () => {
+    const out = validateReport({
+      service: 'example',
+      dependencies: {
+        packageJson: { name: 'example', version: '1.0.0' },
+        packageLock: { lockfileVersion: 3, packages: {} },
+      },
+      checks: [],
+    });
+    assert.equal(out.ok, true);
+    assert.equal(out.report.dependencies.packageLock.lockfileVersion, 3);
+  });
+
+  it('accepts dependencies as JSON strings', () => {
+    const out = validateReport({
+      service: 'example',
+      dependencies: {
+        packageJson: JSON.stringify({ name: 'example' }),
+        packageLock: JSON.stringify({ lockfileVersion: 3 }),
+      },
+      checks: [],
+    });
+    assert.equal(out.ok, true);
+    assert.equal(out.report.dependencies.packageJson.name, 'example');
+  });
+
+  it('rejects bad dependencies shape', () => {
+    const out = validateReport({
+      service: 'x',
+      dependencies: 'nope',
+      checks: [],
+    });
+    assert.equal(out.ok, false);
+  });
 });
 
 describe('buildDashboardRows', () => {

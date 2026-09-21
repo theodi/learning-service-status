@@ -3,6 +3,9 @@
  * One-shot push: node scripts/report-status.js
  * Requires STATUS_REPORT_URL, STATUS_REPORT_KEY, and --service=id
  *
+ * Sends runtime + lockfiles by default (collector runs npm audit).
+ * Optional: --local-audit to also include a client-side npm_audit check.
+ *
  * Usage from an app that copied this client:
  *   node lib/odi-status/scripts/report-status.js --service=my-app --version=1.0.0
  */
@@ -11,11 +14,11 @@ const path = require('path');
 const { reportOnce, npmAuditCheck } = require('..');
 
 function parseArgs(argv) {
-  const out = { service: null, version: null, includeAudit: true };
+  const out = { service: null, version: null, localAudit: false };
   for (const arg of argv.slice(2)) {
     if (arg.startsWith('--service=')) out.service = arg.slice(10);
     else if (arg.startsWith('--version=')) out.version = arg.slice(10);
-    else if (arg === '--no-audit') out.includeAudit = false;
+    else if (arg === '--local-audit') out.localAudit = true;
   }
   return out;
 }
@@ -42,8 +45,9 @@ async function main() {
     force: true,
     service,
     version,
+    cwd: process.cwd(),
     getChecks: async () => {
-      if (!args.includeAudit) return [];
+      if (!args.localAudit) return [];
       return [await npmAuditCheck({ cwd: process.cwd() })];
     },
   });

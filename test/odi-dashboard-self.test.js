@@ -154,7 +154,7 @@ describe('selfReport', () => {
     assert.equal(check.status, 'ok');
   });
 
-  it('builds a self report with runtime (LTS scored on enrich)', async () => {
+  it('builds a self report with runtime and lockfiles (audit on enrich)', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ss-self-'));
     const storePath = path.join(dir, 'reports.json');
     const now = new Date('2026-09-21T12:00:00.000Z');
@@ -164,11 +164,9 @@ describe('selfReport', () => {
       expectedServices: ['care.theodi.org', 'service-status'],
       staleAfterMs: 900000,
       storeEntries: {},
-      npmAuditCheck: {
-        id: 'npm_audit',
-        name: 'npm audit',
-        status: 'ok',
-        message: '0 vulnerabilities',
+      dependencies: {
+        packageJson: { name: 'service-status', version: '1.0.0' },
+        packageLock: { lockfileVersion: 3, packages: {} },
       },
       packageJson: { version: '1.0.0' },
       instance: 'test',
@@ -187,20 +185,38 @@ describe('selfReport', () => {
     assert.equal(report.service, 'service-status');
     assert.ok(report.runtime);
     assert.equal(report.runtime.node, 'v22.23.2');
+    assert.ok(report.dependencies);
+    assert.equal(report.dependencies.packageLock.lockfileVersion, 3);
     assert.ok(!report.checks.some((c) => c.id === 'node_runtime'));
+    assert.ok(!report.checks.some((c) => c.id === 'npm_audit'));
     assert.ok(report.checks.some((c) => c.id === 'process'));
-    assert.ok(report.checks.some((c) => c.id === 'npm_audit' && c.status === 'ok'));
 
     const { enrichReportWithRuntime } = require('../lib/enrichRuntime');
-    const enriched = await enrichReportWithRuntime(report, {
+    const { enrichReportWithNpmAudit } = require('../lib/enrichNpmAudit');
+    let enriched = await enrichReportWithRuntime(report, {
       now,
       nodeCycles: [
         { cycle: '22', lts: '2024-10-29', eol: '2027-04-30', latest: '22.23.2' },
       ],
       osCycles: [{ cycle: '24.04', lts: true, eol: '2029-04-25' }],
     });
+    enriched = await enrichReportWithNpmAudit(enriched, {
+      useCache: false,
+      auditCheck: {
+        id: 'npm_audit',
+        name: 'npm audit',
+        status: 'ok',
+        message: '0 vulnerabilities',
+        detail: { source: 'collector' },
+      },
+    });
     assert.ok(enriched.checks.some((c) => c.id === 'node_runtime' && c.status === 'ok'));
     assert.ok(enriched.checks.some((c) => c.id === 'operating_system' && c.status === 'ok'));
+    assert.ok(
+      enriched.checks.some(
+        (c) => c.id === 'npm_audit' && c.status === 'ok' && c.detail.source === 'collector'
+      )
+    );
   });
 });
 

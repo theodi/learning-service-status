@@ -11,9 +11,10 @@
   },
   "license": "MIT",
   "engines": {
-    "node": ">=18"
+    "node": ">=20.17"
   },
   "dependencies": {
+    "@npmcli/arborist": "^9.9.1",
     "ejs": "^6.0.1",
     "express": "^5.2.1",
     "express-ejs-layouts": "^2.5.1",
