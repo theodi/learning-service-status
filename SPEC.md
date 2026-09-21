@@ -20,7 +20,7 @@ Requires a shared secret (not Google):
 | 401 | Missing or wrong key |
 | 403 | Client IP not on the ingest allowlist |
 
-Staff configure an IPv4/IPv6 allowlist on `/configure` (stored in `data/settings.json`). **Localhost** (`127.0.0.1`, `::1`, and IPv4-mapped localhost) is always allowed. An empty allowlist means only localhost may push. When the TCP peer is a **Cloudflare edge** IP (published CF CIDRs), ingest uses `CF-Connecting-IP` (then `X-Forwarded-For`); otherwise forwarded headers are ignored. Allowlist each pusher’s **real egress IP**, not a Cloudflare edge address.
+Staff configure an IPv4/IPv6 allowlist on `/configure` (stored in `data/settings.json`). **Localhost** (`127.0.0.1`, `::1`, and IPv4-mapped localhost) is always allowed. An empty allowlist means only localhost may push. When the TCP peer is a **Cloudflare edge** IP or **loopback** (local reverse proxy such as Apache→Node), ingest uses `CF-Connecting-IP` (then `X-Forwarded-For`); otherwise forwarded headers are ignored. Allowlist each pusher’s **real egress IP**, not a Cloudflare edge address. The process binds to `LISTEN_HOST` (default `127.0.0.1`) so trusting loopback peers is safe.
 
 ### Dashboard (`GET /`, `GET /configure`, `GET /reports`)
 

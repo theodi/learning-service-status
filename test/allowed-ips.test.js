@@ -58,8 +58,10 @@ describe('allowedIps', () => {
     assert.equal(isCloudflareIp('2606:4700::1'), true);
   });
 
-  it('expressTrustProxy only trusts Cloudflare peers', () => {
+  it('expressTrustProxy trusts Cloudflare and loopback peers', () => {
     assert.equal(expressTrustProxy('141.101.98.212'), true);
+    assert.equal(expressTrustProxy('127.0.0.1'), true);
+    assert.equal(expressTrustProxy('::1'), true);
     assert.equal(expressTrustProxy('203.0.113.10'), false);
   });
 
@@ -71,6 +73,17 @@ describe('allowedIps', () => {
         return undefined;
       },
       socket: { remoteAddress: '141.101.98.212' },
+    };
+    assert.equal(requestClientIp(req), '104.248.167.139');
+  });
+
+  it('requestClientIp trusts CF headers from local reverse proxy', () => {
+    const req = {
+      get(name) {
+        if (name.toLowerCase() === 'cf-connecting-ip') return '104.248.167.139';
+        return undefined;
+      },
+      socket: { remoteAddress: '127.0.0.1' },
     };
     assert.equal(requestClientIp(req), '104.248.167.139');
   });

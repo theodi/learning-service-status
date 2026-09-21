@@ -81,7 +81,7 @@ app.set('views', path.join(root, 'views'));
 app.use(expressLayouts);
 app.set('layout', 'layout');
 
-// Trust X-Forwarded-For / proto only when the TCP peer is a Cloudflare edge IP.
+// Trust X-Forwarded-For / proto from Cloudflare edges or local reverse proxy (Apache).
 app.set('trust proxy', expressTrustProxy);
 
 app.use(express.json({ limit: '5mb' }));
@@ -335,8 +335,10 @@ startSelfReporter(store, {
   intervalMs: Number.isFinite(SELF_INTERVAL_MS) && SELF_INTERVAL_MS >= 30000 ? SELF_INTERVAL_MS : 300000,
 });
 
-app.listen(PORT, () => {
-  console.log(`service-status listening on http://localhost:${PORT}`);
+// Bind loopback only — required if we trust forwarded headers from localhost peers.
+const LISTEN_HOST = process.env.LISTEN_HOST || '127.0.0.1';
+app.listen(PORT, LISTEN_HOST, () => {
+  console.log(`service-status listening on http://${LISTEN_HOST}:${PORT}`);
   console.log(`  expected: ${EXPECTED_SERVICES.join(', ')}`);
   console.log(`  stale after: ${STALE_AFTER_MS}ms`);
   console.log(`  store: ${STORE_PATH}`);

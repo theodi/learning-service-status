@@ -24,6 +24,7 @@ Google Cloud OAuth client: authorised redirect URI must match `GOOGLE_CALLBACK_U
 | Variable | Purpose |
 |----------|---------|
 | `PORT` | Listen port (default `3090`) |
+| `LISTEN_HOST` | Bind address (default `127.0.0.1` — required when Apache proxies to loopback with trusted forwarded headers) |
 | `STATUS_INGEST_KEY` | Shared secret for `POST /reports` |
 | `STALE_AFTER_MS` | Stale threshold (default 15 minutes) |
 | `EXPECTED_SERVICES` | Comma-separated service ids always shown |
