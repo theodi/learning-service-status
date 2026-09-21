@@ -1,0 +1,51 @@
+<%- include('../partials/header') %>
+<main class="content-block docs-page">
+  <h1 class="page-title">Agent playbook</h1>
+  <p class="page-lede">Machine-oriented steps to add status push to an ODI Node.js app. Do not invent a pull-only monitoring API.</p>
+
+  <nav class="docs-nav" aria-label="Documentation">
+    <a href="/docs">Overview</a>
+    <a href="/docs/agent">Agent playbook</a>
+    <a href="/docs/spec">SPEC</a>
+    <a href="/client/odi-status-node.zip">Download Node client (zip)</a>
+  </nav>
+
+  <ol class="agent-steps">
+    <li>Download <code>/client/odi-status-node.zip</code> or copy files from <code>/client/node/</code> into the app under <code>lib/odi-status/</code>.</li>
+    <li>Read <code>lib/odi-status/INTEGRATE.md</code> in the app after copy.</li>
+    <li>Add <code>startStatusReporter({ service, version, getChecks })</code> when the HTTP server starts (after listen). Use a stable <code>service</code> id (deployment identity).</li>
+    <li><strong>Required:</strong> leave <code>runtime</code> enabled (default) so Node + OS versions are sent. Include <code>await npmAuditCheck({ cwd })</code> in <code>getChecks</code>.</li>
+    <li><strong>Required for this app:</strong> list every external dependency (DB, email, HubSpot, AI providers, Django/upstream APIs, queues, storage, OAuth, payment providers, …). For each, add a check that probes it when possible (not only “env is set”).</li>
+    <li>Do <strong>not</strong> score Node/OS LTS in the app. The collector injects <code>node_runtime</code> / <code>operating_system</code>.</li>
+    <li>Document env vars: <code>STATUS_REPORT_URL</code>, <code>STATUS_REPORT_KEY</code>, optional <code>STATUS_REPORT_INTERVAL_MS</code>. If unset, reporter must no-op.</li>
+    <li>Never crash the process on push failure; log a warning only. Never put Google auth on ingest. Never commit the ingest key.</li>
+    <li>Optional CLI: <code>node lib/odi-status/scripts/report-status.js --service=&lt;id&gt;</code> with env set.</li>
+    <li>Acceptance: HTTP 200 from <code>POST /reports</code>; dashboard shows <code>node_runtime</code>, <code>operating_system</code>, <code>npm_audit</code>, and this app’s integration checks.</li>
+  </ol>
+
+  <section class="docs-section">
+    <h2>Example integration checks</h2>
+    <ul>
+      <li><code>mongo</code> / <code>postgres</code> — connect with app credentials</li>
+      <li><code>email</code> / <code>smtp</code> / <code>sendgrid</code> — provider key or SMTP handshake</li>
+      <li><code>hubspot</code> — authenticated HubSpot API call</li>
+      <li><code>openai</code> / <code>ai</code> — AI provider key works (cheap call)</li>
+      <li><code>django</code> / upstream HTTP — dependent service responds</li>
+      <li><code>redis</code>, <code>s3</code>, <code>stripe</code>, <code>queue</code>, OAuth clients — same idea</li>
+    </ul>
+  </section>
+
+  <section class="docs-section">
+    <h2>Files in the sample client</h2>
+    <ul>
+      <li><code>index.js</code> — exports</li>
+      <li><code>detectRuntime.js</code> — versions only (required payload)</li>
+      <li><code>buildReport.js</code> — assemble report</li>
+      <li><code>statusReporter.js</code> — interval push</li>
+      <li><code>checks/npmAudit.js</code> — required audit check helper</li>
+      <li><code>scripts/report-status.js</code> — one-shot push</li>
+      <li><code>INTEGRATE.md</code> — short checklist</li>
+    </ul>
+  </section>
+</main>
+<%- include('../partials/footer') %>

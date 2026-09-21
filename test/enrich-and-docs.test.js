@@ -1,0 +1,312 @@
+const { describe, it, before, after } = require('node:test');
+const assert = require('node:assert/strict');
+const http = require('http');
+const path = require('path');
+const fs = require('fs');
+const os = require('os');
+
+const { enrichReportWithRuntime, runtimeOsToOsInfo } = require('../lib/enrichRuntime');
+const { clearEolCache } = require('../lib/runtimeSupportChecks');
+const { createStore } = require('../lib/store');
+const { validateReport } = require('../lib/validateReport');
+
+describe('enrichReportWithRuntime', () => {
+  const now = new Date('2026-09-21T12:00:00.000Z');
+  const nodeCycles = [
+    { cycle: '22', lts: '2024-10-29', eol: '2027-04-30', latest: '22.23.2' },
+    { cycle: '25', lts: false, eol: '2026-06-01', latest: '25.9.0' },
+  ];
+  const osCycles = [
+    { cycle: '24.04', lts: true, eol: '2029-04-25' },
+    { cycle: '25.04', lts: false, eol: '2026-01-01' },
+  ];
+
+  it('maps runtime.os to osInfo', () => {
+    const info = runtimeOsToOsInfo({
+      id: 'ubuntu',
+      versionId: '24.04',
+      prettyName: 'Ubuntu 24.04 LTS',
+    });
+    assert.equal(info.product, 'ubuntu');
+    assert.equal(info.cycle, '24.04');
+  });
+
+  it('injects node_runtime and operating_system from runtime', async () => {
+    const enriched = await enrichReportWithRuntime(
+      {
+        service: 'demo',
+        runtime: {
+          node: 'v22.23.2',
+          os: { id: 'ubuntu', versionId: '24.04', prettyName: 'Ubuntu 24.04 LTS' },
+        },
+        checks: [
+          { id: 'npm_audit', name: 'npm audit', status: 'ok', message: '0 vulnerabilities' },
+          { id: 'up', name: 'Up', status: 'ok', message: 'yes' },
+        ],
+      },
+      { now, nodeCycles, osCycles }
+    );
+    assert.equal(enriched.checks[0].id, 'node_runtime');
+    assert.equal(enriched.checks[0].status, 'ok');
+    assert.equal(enriched.checks[1].id, 'operating_system');
+    assert.equal(enriched.checks[1].status, 'ok');
+    assert.ok(enriched.checks.some((c) => c.id === 'up'));
+  });
+
+  it('replaces legacy runtime checks when runtime is present', async () => {
+    const enriched = await enrichReportWithRuntime(
+      {
+        service: 'demo',
+        runtime: { node: 'v25.0.0' },
+        checks: [
+          { id: 'node_runtime', name: 'Node.js', status: 'ok', message: 'stale client claim' },
+          { id: 'npm_audit', name: 'npm audit', status: 'ok', message: '0 vulnerabilities' },
+          { id: 'up', name: 'Up', status: 'ok', message: 'yes' },
+        ],
+      },
+      { now, nodeCycles, osCycles }
+    );
+    const node = enriched.checks.find((c) => c.id === 'node_runtime');
+    assert.equal(node.status, 'fail');
+    assert.ok(!node.message.includes('stale client claim'));
+    assert.ok(enriched.checks.some((c) => c.id === 'up'));
+    assert.ok(
+      enriched.checks.some(
+        (c) => c.id === 'operating_system' && c.status === 'warn' && /runtime\.os/.test(c.message)
+      )
+    );
+  });
+
+  it('keeps legacy runtime checks when runtime omitted', async () => {
+    const enriched = await enrichReportWithRuntime({
+      service: 'demo',
+      checks: [
+        { id: 'node_runtime', name: 'Node.js', status: 'warn', message: 'legacy' },
+        { id: 'npm_audit', name: 'npm audit', status: 'ok', message: '0 vulnerabilities' },
+        { id: 'up', name: 'Up', status: 'ok', message: 'yes' },
+      ],
+    });
+    assert.equal(enriched.checks[0].id, 'node_runtime');
+    assert.equal(enriched.checks[0].status, 'warn');
+  });
+
+  it('warns when runtime and npm_audit are missing', async () => {
+    const enriched = await enrichReportWithRuntime({
+      service: 'demo',
+      checks: [{ id: 'up', name: 'Up', status: 'ok', message: 'yes' }],
+    });
+    assert.ok(
+      enriched.checks.some(
+        (c) => c.id === 'node_runtime' && c.status === 'warn' && /required/.test(c.message)
+      )
+    );
+    assert.ok(
+      enriched.checks.some(
+        (c) => c.id === 'operating_system' && c.status === 'warn' && /required/.test(c.message)
+      )
+    );
+    assert.ok(
+      enriched.checks.some(
+        (c) => c.id === 'npm_audit' && c.status === 'warn' && /required/.test(c.message)
+      )
+    );
+  });
+});
+
+describe('public docs and client routes', () => {
+  let server;
+  let baseUrl;
+  let prevKey;
+  let storePath;
+
+  before(async () => {
+    prevKey = process.env.STATUS_INGEST_KEY;
+    process.env.STATUS_INGEST_KEY = 'test-ingest-key';
+    process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-session';
+    storePath = path.join(os.tmpdir(), `ss-reports-${process.pid}.json`);
+    process.env.REPORTS_STORE_PATH = storePath;
+    process.env.SELF_REPORT_INTERVAL_MS = '999999999';
+
+    // Load app after env is set — index.js starts listening; we need a test harness.
+    // Use a minimal express mount of the same public routes instead of requiring index.js
+    // (index listens on PORT). Spin a tiny server for docs + enrich ingest logic.
+    const express = require('express');
+    const expressLayouts = require('express-ejs-layouts');
+    const { renderSimpleMarkdown } = require('../lib/simpleMarkdown');
+    const { streamClientNodeZip } = require('../lib/clientZip');
+    const { extractIngestKey } = require('../lib/validateReport');
+
+    const root = path.join(__dirname, '..');
+    const app = express();
+    app.set('view engine', 'ejs');
+    app.set('views', path.join(root, 'views'));
+    app.use(expressLayouts);
+    app.set('layout', 'layout');
+    app.use(express.json());
+    app.use((req, res, next) => {
+      res.locals.user = null;
+      res.locals.formatAge = () => '';
+      next();
+    });
+    app.use('/client/node', express.static(path.join(root, 'client', 'node')));
+
+    const store = createStore(storePath);
+
+    app.get('/docs', (req, res) => {
+      res.locals.page = { title: 'Docs' };
+      res.render('pages/docs');
+    });
+    app.get('/docs/spec', (req, res) => {
+      const md = fs.readFileSync(path.join(root, 'SPEC.md'), 'utf8');
+      res.locals.page = { title: 'SPEC' };
+      res.render('pages/docs-spec', { specHtml: renderSimpleMarkdown(md) });
+    });
+    app.get('/docs/agent', (req, res) => {
+      res.locals.page = { title: 'Agent' };
+      res.render('pages/docs-agent');
+    });
+    app.get('/client/odi-status-node.zip', (req, res) => {
+      streamClientNodeZip(res, path.join(root, 'client', 'node'));
+    });
+    app.post('/reports', async (req, res) => {
+      const key = extractIngestKey(req);
+      if (key !== 'test-ingest-key') return res.status(401).json({ error: 'Unauthorized' });
+      const validated = validateReport(req.body);
+      if (!validated.ok) return res.status(400).json({ error: validated.error });
+      const report = await enrichReportWithRuntime(validated.report, {
+        now: new Date('2026-09-21T12:00:00.000Z'),
+        nodeCycles: [
+          { cycle: '22', lts: '2024-10-29', eol: '2027-04-30', latest: '22.23.2' },
+        ],
+        osCycles: [{ cycle: '24.04', lts: true, eol: '2029-04-25' }],
+      });
+      const receivedAt = new Date().toISOString();
+      store.upsert(report.service, report, receivedAt);
+      res.json({ ok: true, service: report.service, receivedAt, checks: report.checks });
+    });
+
+    await new Promise((resolve) => {
+      server = app.listen(0, '127.0.0.1', resolve);
+    });
+    const { port } = server.address();
+    baseUrl = `http://127.0.0.1:${port}`;
+  });
+
+  after(() => {
+    if (server) server.close();
+    if (prevKey === undefined) delete process.env.STATUS_INGEST_KEY;
+    else process.env.STATUS_INGEST_KEY = prevKey;
+    try {
+      fs.unlinkSync(storePath);
+    } catch {
+      /* ignore */
+    }
+    clearEolCache();
+  });
+
+  function get(pathname) {
+    return new Promise((resolve, reject) => {
+      http
+        .get(`${baseUrl}${pathname}`, (res) => {
+          let body = '';
+          res.on('data', (c) => {
+            body += c;
+          });
+          res.on('end', () => resolve({ status: res.statusCode, body, headers: res.headers }));
+        })
+        .on('error', reject);
+    });
+  }
+
+  function postJson(pathname, body, headers = {}) {
+    return new Promise((resolve, reject) => {
+      const data = JSON.stringify(body);
+      const req = http.request(
+        `${baseUrl}${pathname}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(data),
+            ...headers,
+          },
+        },
+        (res) => {
+          let text = '';
+          res.on('data', (c) => {
+            text += c;
+          });
+          res.on('end', () => {
+            let json = null;
+            try {
+              json = JSON.parse(text);
+            } catch {
+              /* ignore */
+            }
+            resolve({ status: res.statusCode, body: text, json });
+          });
+        }
+      );
+      req.on('error', reject);
+      req.write(data);
+      req.end();
+    });
+  }
+
+  it('GET /docs is public 200', async () => {
+    const res = await get('/docs');
+    assert.equal(res.status, 200);
+    assert.match(res.body, /Integrate service status/);
+  });
+
+  it('GET /docs/agent is public 200', async () => {
+    const res = await get('/docs/agent');
+    assert.equal(res.status, 200);
+    assert.match(res.body, /Agent playbook/);
+  });
+
+  it('GET /docs/spec is public 200', async () => {
+    const res = await get('/docs/spec');
+    assert.equal(res.status, 200);
+    assert.match(res.body, /Service status push convention/);
+  });
+
+  it('GET /client/node/INTEGRATE.md is public 200', async () => {
+    const res = await get('/client/node/INTEGRATE.md');
+    assert.equal(res.status, 200);
+    assert.match(res.body, /Integrate service-status/);
+  });
+
+  it('GET /client/odi-status-node.zip returns zip', async () => {
+    const res = await get('/client/odi-status-node.zip');
+    assert.equal(res.status, 200);
+    assert.match(res.headers['content-type'] || '', /zip/);
+    assert.ok(res.body.length > 100);
+  });
+
+  it('POST /reports enriches runtime into checks', async () => {
+    const res = await postJson(
+      '/reports',
+      {
+        service: 'enrich-demo',
+        runtime: {
+          node: 'v22.23.2',
+          os: { id: 'ubuntu', versionId: '24.04', prettyName: 'Ubuntu 24.04 LTS' },
+        },
+        checks: [
+          { id: 'npm_audit', name: 'npm audit', status: 'ok', message: '0 vulnerabilities' },
+          { id: 'up', name: 'Up', status: 'ok', message: 'yes' },
+        ],
+      },
+      { Authorization: 'Bearer test-ingest-key' }
+    );
+    assert.equal(res.status, 200);
+    assert.equal(res.json.ok, true);
+    const ids = res.json.checks.map((c) => c.id);
+    assert.ok(ids.includes('node_runtime'));
+    assert.ok(ids.includes('operating_system'));
+    assert.ok(ids.includes('up'));
+    assert.ok(ids.includes('npm_audit'));
+    assert.equal(res.json.checks.find((c) => c.id === 'node_runtime').status, 'ok');
+  });
+});

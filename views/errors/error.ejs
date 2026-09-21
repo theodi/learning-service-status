@@ -1,0 +1,9 @@
+<%- include('../partials/header') %>
+<main class="content-block">
+  <div class="error-panel">
+    <h1><%= typeof statusCode !== 'undefined' ? statusCode : 500 %></h1>
+    <p><%= typeof errorMessage !== 'undefined' ? errorMessage : 'Something went wrong.' %></p>
+    <p><a href="/">Back to service status</a></p>
+  </div>
+</main>
+<%- include('../partials/footer') %>

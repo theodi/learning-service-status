@@ -1,0 +1,88 @@
+<%- include('../partials/header') %>
+<main class="content-block docs-page">
+  <h1 class="page-title">Integrate service status</h1>
+  <p class="page-lede">Push health checks from ODI services to this collector. Public docs and the Node sample client — no login required here. The ingest key is only on the staff Configure page.</p>
+
+  <nav class="docs-nav" aria-label="Documentation">
+    <a href="/docs">Overview</a>
+    <a href="/docs/agent">Agent playbook</a>
+    <a href="/docs/spec">SPEC</a>
+    <a href="/client/odi-status-node.zip">Download Node client (zip)</a>
+    <a href="/client/node/INTEGRATE.md">Browse INTEGRATE.md</a>
+  </nav>
+
+  <section class="docs-section">
+    <h2>How it works</h2>
+    <ol>
+      <li>Each app builds a JSON report with a stable <code>service</code> id, required <code>runtime</code> versions, required <code>npm_audit</code>, and probes for external integrations.</li>
+      <li>The app POSTs to <code>/reports</code> with the shared ingest key (no Google login).</li>
+      <li>This collector scores Node/OS LTS from <code>runtime</code> and shows the fleet on the staff dashboard.</li>
+    </ol>
+  </section>
+
+  <section class="docs-section">
+    <h2>Required on every Node service</h2>
+    <ul>
+      <li><strong>Node version</strong> — <code>runtime.node</code> (sample client sends this automatically)</li>
+      <li><strong>OS version</strong> — <code>runtime.os</code> (automatic)</li>
+      <li><strong>npm audit</strong> — <code>checks</code> entry <code>id: "npm_audit"</code> via <code>npmAuditCheck()</code></li>
+    </ul>
+    <p>The collector evaluates LTS/EOL for Node and OS. Apps must not call endoflife.date.</p>
+  </section>
+
+  <section class="docs-section">
+    <h2>Also check external integrations</h2>
+    <p>Anything where an external issue can break the app needs a check. Prefer a real probe (connection, authenticated API call, SMTP handshake) over “env var is set”.</p>
+    <ul>
+      <li><strong>Data stores</strong> — MongoDB, Postgres, MySQL, Redis, …</li>
+      <li><strong>Upstream apps / APIs</strong> — Django services, internal HTTP APIs</li>
+      <li><strong>Email</strong> — SendGrid, Mailgun, SMTP (API key / handshake works)</li>
+      <li><strong>CRM / marketing</strong> — HubSpot and similar (key authenticates)</li>
+      <li><strong>AI providers</strong> — OpenAI, Anthropic, etc. (key works; use a cheap call)</li>
+      <li><strong>Payments, storage, queues, OAuth</strong> — Stripe, S3/GCS, Rabbit/SQS, Google OAuth, …</li>
+    </ul>
+    <p>If the app needs an API key, secret, or network hop to a third party or shared infrastructure, add a check. Skip purely in-process libraries with no external dependency.</p>
+  </section>
+
+  <section class="docs-section">
+    <h2>Node sample client</h2>
+    <p>Copy the client into your app (e.g. <code>lib/odi-status/</code>) or unzip the download.</p>
+    <ul>
+      <li><a href="/client/odi-status-node.zip">odi-status-node.zip</a></li>
+      <li>Browse source: <a href="/client/node/">/client/node/</a></li>
+    </ul>
+    <pre class="config-snippet">const { startStatusReporter, npmAuditCheck } = require('./lib/odi-status');
+
+startStatusReporter({
+  service: 'my-service-id',
+  version: require('./package.json').version,
+  getChecks: async () => [
+    await checkMongo(),      // example — your integrations
+    await checkHubspot(),
+    await checkEmail(),
+    await npmAuditCheck({ cwd: __dirname }), // required
+  ],
+});</pre>
+    <p>Environment (staff get the real values from <strong>Configure</strong> after sign-in):</p>
+    <pre class="config-snippet">STATUS_REPORT_URL=https://&lt;collector-host&gt;/reports
+STATUS_REPORT_KEY=&lt;ingest-key&gt;
+STATUS_REPORT_INTERVAL_MS=300000</pre>
+  </section>
+
+  <section class="docs-section">
+    <h2>Check shape</h2>
+    <pre class="config-snippet">{
+  id: 'hubspot',
+  name: 'HubSpot',
+  status: 'ok', // ok | warn | fail
+  message: 'API key accepted',
+  detail: {}
+}</pre>
+  </section>
+
+  <section class="docs-section">
+    <h2>For AI agents</h2>
+    <p>Follow the numbered playbook: <a href="/docs/agent">/docs/agent</a>. Canonical contract: <a href="/docs/spec">/docs/spec</a>.</p>
+  </section>
+</main>
+<%- include('../partials/footer') %>

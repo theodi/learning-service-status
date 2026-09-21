@@ -1,0 +1,27 @@
+<header class="header">
+  <div class="container">
+    <div class="header-top">
+      <a href="/" class="logo" aria-label="Open Data Institute — Service status"></a>
+      <nav class="main-nav" aria-label="Main">
+        <ul>
+          <li>
+            <a href="/docs" class="<%= typeof navActive !== 'undefined' && navActive === 'docs' ? 'is-active' : '' %>">Docs</a>
+          </li>
+          <% if (typeof user !== 'undefined' && user) { %>
+          <li>
+            <a href="/configure" class="<%= typeof navActive !== 'undefined' && navActive === 'configure' ? 'is-active' : '' %>">Configure</a>
+          </li>
+          <li><span class="nav-user"><%= user.displayName || user.email %></span></li>
+          <li>
+            <form id="logout_form" action="/logout" method="post" style="display:inline;">
+              <button type="submit">Log out</button>
+            </form>
+          </li>
+          <% } else { %>
+          <li><a href="/auth/google">Sign in</a></li>
+          <% } %>
+        </ul>
+      </nav>
+    </div>
+  </div>
+</header>

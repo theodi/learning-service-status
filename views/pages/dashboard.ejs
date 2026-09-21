@@ -1,0 +1,84 @@
+<%- include('../partials/header') %>
+<main class="content-block" id="dashboard-root"
+  data-filter="all"
+  data-search="">
+  <div class="page-header">
+    <h1 class="page-title">Service status</h1>
+    <div class="fleet-summary" id="fleet-summary" role="group" aria-label="Filter by status">
+      <div class="stat-box stat-overall overall-<%= summary.overall %>" id="fleet-overall" aria-hidden="true">
+        <span class="stat-value"><%= summary.overall %></span>
+        <span class="stat-label">Overall</span>
+      </div>
+      <button type="button" class="stat-box count-fail" data-filter="fail" aria-pressed="false">
+        <span class="stat-value" id="count-fail"><%= summary.fail %></span>
+        <span class="stat-label">Fail</span>
+      </button>
+      <button type="button" class="stat-box count-warn" data-filter="warn" aria-pressed="false">
+        <span class="stat-value" id="count-warn"><%= summary.warn %></span>
+        <span class="stat-label">Warn</span>
+      </button>
+      <button type="button" class="stat-box count-ok" data-filter="ok" aria-pressed="false">
+        <span class="stat-value" id="count-ok"><%= summary.ok %></span>
+        <span class="stat-label">Ok</span>
+      </button>
+      <button type="button" class="stat-box count-stale" data-filter="stale" aria-pressed="false">
+        <span class="stat-value" id="count-stale"><%= summary.stale %></span>
+        <span class="stat-label">Stale</span>
+      </button>
+      <button type="button" class="stat-box count-total is-active" data-filter="all" aria-pressed="true">
+        <span class="stat-value" id="count-total"><%= summary.total %></span>
+        <span class="stat-label">All</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="filters">
+    <label>
+      Search
+      <input type="search" id="filter-search" placeholder="Service name" aria-label="Search services">
+    </label>
+  </div>
+
+  <% if (!services.length) { %>
+  <p class="empty">No services yet. Set EXPECTED_SERVICES or wait for a push / self-report.</p>
+  <% } %>
+
+  <div class="service-list" id="service-list">
+    <% services.forEach(function (row) {
+      var expand = row.overall === 'fail' || row.overall === 'warn' || row.stale;
+    %>
+    <section
+      class="service overall-<%= row.overall %>"
+      id="svc-<%= row.service %>"
+      data-service="<%= row.service %>"
+      data-overall="<%= row.overall %>"
+      data-stale="<%= row.stale ? 'true' : 'false' %>"
+      data-collapsed="<%= expand ? 'false' : 'true' %>"
+    >
+      <button type="button" class="service-summary" aria-expanded="<%= expand ? 'true' : 'false' %>">
+        <span class="service-toggle" aria-hidden="true"><%= expand ? '▾' : '▸' %></span>
+        <span>
+          <h2 class="service-name"><%= row.service %></h2>
+          <p class="service-meta">
+            <% if (row.version) { %>v<%= row.version %> · <% } %>
+            <% if (row.instance) { %><%= row.instance %> · <% } %>
+            last <%= formatAge(row.ageMs) %>
+          </p>
+        </span>
+        <span class="service-badge"><%= row.overall %></span>
+      </button>
+      <ul class="checks">
+        <% row.checks.forEach(function (c) { %>
+        <li class="check check-<%= c.status %>">
+          <span class="check-status"><%= c.status %></span>
+          <span class="check-name"><%= c.name %></span>
+          <span class="check-msg"><%= c.message %></span>
+        </li>
+        <% }) %>
+      </ul>
+    </section>
+    <% }) %>
+  </div>
+</main>
+<%- include('../partials/footer') %>
+<script src="/js/dashboard.js"></script>

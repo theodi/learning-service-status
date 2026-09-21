@@ -1,0 +1,24 @@
+{
+  "name": "service-status",
+  "version": "1.0.0",
+  "description": "Central collector and dashboard for service status push reports",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "test": "node --test test/*.test.js",
+    "report-status": "node scripts/report-status.js"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ejs": "^6.0.1",
+    "express": "^5.2.1",
+    "express-ejs-layouts": "^2.5.1",
+    "express-session": "^1.19.0",
+    "passport": "^0.7.0",
+    "passport-google-oauth": "^2.0.0"
+  }
+}

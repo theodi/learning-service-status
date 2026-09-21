@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= typeof page !== 'undefined' && page.title ? page.title : 'Service status' %></title>
+  <% if (typeof metaRefresh !== 'undefined' && metaRefresh) { %>
+  <meta http-equiv="refresh" content="<%= metaRefresh %>">
+  <% } %>
+  <link href="/css/style.css" rel="stylesheet">
+  <link rel="shortcut icon" href="/images/odifavicon32.ico">
+</head>
+<body>
+  <%- body %>
+</body>
+</html>

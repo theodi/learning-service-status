@@ -1,0 +1,13 @@
+{
+  "name": "odi-status-node",
+  "version": "1.0.0",
+  "description": "Sample Node client for ODI service-status push (copy into your app)",
+  "main": "index.js",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "report-status": "node scripts/report-status.js"
+  }
+}

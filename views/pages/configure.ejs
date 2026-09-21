@@ -1,0 +1,44 @@
+<%- include('../partials/header') %>
+<main class="content-block" id="configure-root">
+  <h1 class="page-title">Configure</h1>
+  <p class="page-lede">Set these on each app so it can push status. No Google login is required to push — auth is the shared ingest key only.</p>
+
+  <% if (!clientConfig.ingestKey) { %>
+  <p class="empty">STATUS_INGEST_KEY is not set on this collector — pushes will fail until it is configured.</p>
+  <% } else { %>
+  <div class="client-config-body is-page">
+    <dl class="config-fields">
+      <div class="config-field">
+        <dt>STATUS_REPORT_URL</dt>
+        <dd>
+          <code class="config-value" id="config-report-url"><%= clientConfig.reportUrl %></code>
+          <button type="button" class="config-copy" data-copy-target="config-report-url">Copy</button>
+        </dd>
+      </div>
+      <div class="config-field">
+        <dt>STATUS_REPORT_KEY</dt>
+        <dd>
+          <code
+            class="config-value is-secret"
+            id="config-ingest-key"
+            data-secret="<%= clientConfig.ingestKey %>"
+            aria-label="Ingest key (hidden)"
+          >••••••••</code>
+          <button type="button" class="config-reveal" data-reveal-target="config-ingest-key" aria-pressed="false">Show</button>
+          <button type="button" class="config-copy" data-copy-secret="config-ingest-key">Copy</button>
+        </dd>
+      </div>
+    </dl>
+    <pre
+      class="config-snippet"
+      id="config-env-snippet"
+      data-url="<%= clientConfig.reportUrl %>"
+      data-key="<%= clientConfig.ingestKey %>"
+    >STATUS_REPORT_URL=<%= clientConfig.reportUrl %>
+STATUS_REPORT_KEY=••••••••</pre>
+    <button type="button" class="config-copy" data-copy-env="config-env-snippet">Copy env block</button>
+  </div>
+  <% } %>
+</main>
+<%- include('../partials/footer') %>
+<script src="/js/configure.js"></script>
