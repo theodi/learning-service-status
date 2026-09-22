@@ -122,7 +122,7 @@ Apps should **not** embed their own status reporters.
 | Report kind | Collector injects |
 |-------------|-------------------|
 | Host (`service` `host:<id>`) | `operating_system` (LTS from `runtime.os`). No Node/npm LTS, no `npm_audit`. |
-| App | `node_runtime` (LTS), `npm_runtime` (major vs latest on registry). Preserves agent `npm_audit`. No OS check. |
+| App | `node_runtime` (LTS), `npm_runtime` (stable npm line for that Node + latest patch of that major). Preserves agent `npm_audit`. No OS check. |
 
 ## Stale detection
 

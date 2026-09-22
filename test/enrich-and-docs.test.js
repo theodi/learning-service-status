@@ -47,7 +47,7 @@ describe('enrichReportWithRuntime', () => {
           { id: 'up', name: 'Up', status: 'ok', message: 'yes' },
         ],
       },
-      { now, nodeCycles, osCycles, npmLatestMajor: 10 }
+      { now, nodeCycles, osCycles, npmLatestForMajor: '10.9.0' }
     );
     assert.equal(enriched.checks[0].id, 'node_runtime');
     assert.equal(enriched.checks[0].status, 'ok');
@@ -87,13 +87,14 @@ describe('enrichReportWithRuntime', () => {
           { id: 'up', name: 'Up', status: 'ok', message: 'yes' },
         ],
       },
-      { now, nodeCycles, npmLatestMajor: 10 }
+      { now, nodeCycles, npmLatestForMajor: '9.9.4' }
     );
     const node = enriched.checks.find((c) => c.id === 'node_runtime');
     assert.equal(node.status, 'fail');
     assert.ok(!node.message.includes('stale client claim'));
     assert.ok(enriched.checks.some((c) => c.id === 'up'));
-    assert.ok(enriched.checks.some((c) => c.id === 'npm_runtime' && c.status === 'warn'));
+    // Node 25 expects npm 11.x — npm 9 is the wrong line
+    assert.ok(enriched.checks.some((c) => c.id === 'npm_runtime' && c.status === 'fail'));
     assert.ok(!enriched.checks.some((c) => c.id === 'operating_system'));
   });
 
@@ -154,7 +155,7 @@ describe('enrichReportWithRuntime', () => {
         nodeCycles: [
           { cycle: '22', lts: '2024-10-29', eol: '2027-04-30', latest: '22.23.2' },
         ],
-        npmLatestMajor: 10,
+        npmLatestForMajor: '10.9.0',
       }
     );
     assert.ok(!enriched.checks.some((c) => c.id === 'operating_system'));
@@ -323,7 +324,7 @@ describe('public docs and client routes', () => {
           { cycle: '22', lts: '2024-10-29', eol: '2027-04-30', latest: '22.23.2' },
         ],
         osCycles: [{ cycle: '24.04', lts: true, eol: '2029-04-25' }],
-        npmLatestMajor: 10,
+        npmLatestForMajor: '10.9.0',
       });
       report = await enrichReportWithNpmAudit(report);
       const receivedAt = new Date().toISOString();

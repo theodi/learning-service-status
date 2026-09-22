@@ -25,7 +25,10 @@ const {
 const {
   evaluateSupportWindow,
   checkNodeRuntime,
+  checkNpmRuntime,
   checkOperatingSystem,
+  compareNpmVersions,
+  bundledNpmMajorForNode,
 } = require('../lib/runtimeSupportChecks');
 
 describe('odiStaff', () => {
@@ -205,7 +208,7 @@ describe('selfReport', () => {
       nodeCycles: [
         { cycle: '22', lts: '2024-10-29', eol: '2027-04-30', latest: '22.23.2' },
       ],
-      npmLatestMajor: 10,
+      npmLatestForMajor: '10.9.0',
     });
     enriched = await enrichReportWithNpmAudit(enriched);
     assert.ok(enriched.checks.some((c) => c.id === 'node_runtime' && c.status === 'ok'));
@@ -318,5 +321,44 @@ describe('runtimeSupportChecks', () => {
       ).status,
       'fail'
     );
+  });
+});
+
+describe('checkNpmRuntime', () => {
+  it('treats npm 10 as ok for Node 22 when on latest 10.x', async () => {
+    const check = await checkNpmRuntime({
+      npmVersion: '10.9.9',
+      nodeVersion: 'v22.23.2',
+      npmLatestForMajor: '10.9.9',
+    });
+    assert.equal(check.status, 'ok');
+    assert.match(check.message, /Node 22/);
+  });
+
+  it('fails npm 10.9.8 when 10.9.9 is the current 10.x (security)', async () => {
+    const check = await checkNpmRuntime({
+      npmVersion: '10.9.8',
+      nodeVersion: 'v22.23.2',
+      npmLatestForMajor: '10.9.9',
+    });
+    assert.equal(check.status, 'fail');
+    assert.match(check.message, /10\.9\.9/);
+    assert.match(check.message, /security/);
+  });
+
+  it('fails wrong npm major for Node 22', async () => {
+    const check = await checkNpmRuntime({
+      npmVersion: '9.0.0',
+      nodeVersion: 'v22.23.2',
+      npmLatestForMajor: '9.9.4',
+    });
+    assert.equal(check.status, 'fail');
+    assert.match(check.message, /stable line/);
+  });
+
+  it('maps Node 22 to bundled npm 10', () => {
+    assert.equal(bundledNpmMajorForNode(22), 10);
+    assert.equal(bundledNpmMajorForNode(24), 11);
+    assert.equal(compareNpmVersions('10.9.8', '10.9.9'), -1);
   });
 });
