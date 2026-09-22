@@ -35,7 +35,7 @@ function normalizeConfig(raw) {
     enabled: Boolean(url && key),
     hostId,
     scanRoots,
-    scanDepth: Number.isFinite(scanDepth) && scanDepth > 0 ? scanDepth : 4,
+    scanDepth: Number.isFinite(scanDepth) && scanDepth >= 0 ? scanDepth : 4,
     intervalMs:
       Number.isFinite(intervalMs) && intervalMs >= 60000 ? intervalMs : 3600000,
   };
