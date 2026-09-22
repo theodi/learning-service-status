@@ -68,21 +68,4 @@
       if (toggle) toggle.textContent = next ? '▸' : '▾';
     });
   }
-
-  setInterval(function () {
-    fetch('/reports', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
-      .then(function (res) {
-        if (res.status === 401 || res.status === 403) {
-          window.location.href = '/login';
-          return null;
-        }
-        if (!res.ok) return null;
-        return res.json();
-      })
-      .then(function (data) {
-        if (!data || !Array.isArray(data.services)) return;
-        window.location.reload();
-      })
-      .catch(function () {});
-  }, 30000);
 })();
