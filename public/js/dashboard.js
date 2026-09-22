@@ -20,16 +20,24 @@
 
   function applyFilters() {
     var q = ((searchInput && searchInput.value) || '').trim().toLowerCase();
-    var sections = list ? list.querySelectorAll('.service') : [];
-    sections.forEach(function (el) {
-      var overall = el.getAttribute('data-overall');
-      var stale = el.getAttribute('data-stale') === 'true';
-      var name = (el.getAttribute('data-service') || '').toLowerCase();
-      var statusOk =
-        currentStatus === 'all' ||
-        (currentStatus === 'stale' ? stale : overall === currentStatus);
-      var searchOk = !q || name.indexOf(q) !== -1;
-      el.style.display = statusOk && searchOk ? '' : 'none';
+    var groups = list ? list.querySelectorAll('.host-group') : [];
+    groups.forEach(function (group) {
+      var services = group.querySelectorAll('.service');
+      var anyVisible = false;
+      services.forEach(function (el) {
+        var overall = el.getAttribute('data-overall');
+        var stale = el.getAttribute('data-stale') === 'true';
+        var name = (el.getAttribute('data-service') || '').toLowerCase();
+        var host = (el.getAttribute('data-host') || group.getAttribute('data-host') || '').toLowerCase();
+        var statusOk =
+          currentStatus === 'all' ||
+          (currentStatus === 'stale' ? stale : overall === currentStatus);
+        var searchOk = !q || name.indexOf(q) !== -1 || host.indexOf(q) !== -1;
+        var show = statusOk && searchOk;
+        el.style.display = show ? '' : 'none';
+        if (show) anyVisible = true;
+      });
+      group.style.display = anyVisible ? '' : 'none';
     });
   }
 
@@ -38,7 +46,6 @@
       var btn = ev.target.closest('[data-filter]');
       if (!btn || !summary.contains(btn)) return;
       var next = btn.getAttribute('data-filter') || 'all';
-      // Clicking the active filter again clears to all
       if (next === currentStatus && next !== 'all') next = 'all';
       setActiveFilter(next);
       applyFilters();
@@ -51,7 +58,7 @@
     list.addEventListener('click', function (ev) {
       var btn = ev.target.closest('.service-summary');
       if (!btn || !list.contains(btn)) return;
-      var section = btn.closest('.service');
+      var section = btn.closest('.service, .host-group');
       if (!section) return;
       var collapsed = section.getAttribute('data-collapsed') !== 'false';
       var next = !collapsed;

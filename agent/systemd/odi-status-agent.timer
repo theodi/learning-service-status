@@ -1,0 +1,11 @@
+[Unit]
+Description=Run ODI service-status host agent hourly
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1h
+Persistent=true
+Unit=odi-status-agent.service
+
+[Install]
+WantedBy=timers.target

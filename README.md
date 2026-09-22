@@ -2,9 +2,9 @@
 
 Central push collector and ODI-staff dashboard for the [service status convention](./SPEC.md).
 
-**Public integration:** [`/docs`](http://localhost:3090/docs) (agent playbook, SPEC, downloadable Node client). Staff sign-in is only for the dashboard and Configure (ingest key).
+**Public integration:** [`/docs`](http://localhost:3090/docs). Staff sign-in is for the dashboard and Configure only.
 
-Services POST self-describing check reports with an ingest key. The collector scores **Node.js / OS LTS** from `runtime` and audits uploaded lockfiles (`dependencies`) **in-process** with `@npmcli/arborist` (no system `npm` binary). Staff (`@theodi.org`) view the fleet after Google sign-in.
+A **host agent** on each server discovers apps and POSTs host + app reports (with required `host` for nesting). The agent runs **`npm audit`** in each app directory; the collector scores **Node.js / OS LTS**. Staff (`@theodi.org`) view the fleet after Google sign-in.
 
 ## Quick start
 
@@ -17,53 +17,40 @@ npm start
 # open http://localhost:3090 → Sign in with Google (dashboard)
 ```
 
-Google Cloud OAuth client: authorised redirect URI must match `GOOGLE_CALLBACK_URL` (e.g. `http://localhost:3090/auth/google/callback`).
+Host agent (separate process on each server):
+
+```bash
+cd agent && cp config.json.example config.json && npm install && npm run once
+```
 
 ## Env
 
 | Variable | Purpose |
 |----------|---------|
 | `PORT` | Listen port (default `3090`) |
-| `LISTEN_HOST` | Bind address (default `127.0.0.1` — required when Apache proxies to loopback with trusted forwarded headers) |
+| `LISTEN_HOST` | Bind address (default `127.0.0.1`) |
 | `STATUS_INGEST_KEY` | Shared secret for `POST /reports` |
-| `STALE_AFTER_MS` | Stale threshold (default 15 minutes) |
-| `EXPECTED_SERVICES` | Comma-separated service ids always shown |
-| `SELF_REPORT_INTERVAL_MS` | How often this app upserts its own report |
+| `STALE_AFTER_MS` | Stale threshold (default **2 hours**) |
+| `EXPECTED_SERVICES` | Comma-separated ids (e.g. `host:learndata-1,care.theodi.org`) |
 | `REPORTS_STORE_PATH` | JSON persistence path |
-| `SETTINGS_STORE_PATH` | Allowlist settings path (default `./data/settings.json`) |
+| `SETTINGS_STORE_PATH` | Allowlist settings path |
 | `SESSION_SECRET` | Express session secret |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth |
 | `GOOGLE_CALLBACK_URL` | OAuth callback URL |
-| `PUBLIC_BASE_URL` | Optional canonical origin shown in the dashboard configure panel |
+| `PUBLIC_BASE_URL` | Optional canonical origin for Configure |
 
 ## API / routes
 
 | Route | Auth | Purpose |
 |-------|------|---------|
-| `POST /reports` | ingest key | Client push (collector enriches LTS + npm audit from lockfiles; JSON body up to 5mb) |
-| `GET /` | Google + `@theodi.org` | Dashboard |
+| `POST /reports` | ingest key | Host agent push (LTS enrich; body up to 1mb) |
+| `GET /` | Google + `@theodi.org` | Dashboard (grouped by host) |
 | `GET /configure` | Google + `@theodi.org` | Ingest URL + key + IP allowlist |
-| `GET /settings` | Google + `@theodi.org` | JSON settings (allowlist) |
-| `PUT /settings` | Google + `@theodi.org` | Update allowlist `{ "allowedIps": [...] }` |
+| `GET /settings` | Google + `@theodi.org` | JSON allowlist |
+| `PUT /settings` | Google + `@theodi.org` | Update allowlist |
 | `GET /reports` | Google + `@theodi.org` | JSON for UI refresh |
 | `GET /docs` | public | Integration guide |
-| `GET /docs/agent` | public | Agent playbook |
+| `GET /docs/agent` | public | Host agent playbook |
 | `GET /docs/spec` | public | Rendered SPEC |
-| `GET /client/node/*` | public | Browse sample client |
-| `GET /client/odi-status-node.zip` | public | Download sample client |
-| `GET /login` | public | Sign-in page |
-| `GET /auth/google` | public | Start OAuth |
-| `POST /logout` | session | Logout |
 
-```bash
-# Client push (no Google) — runtime scored on the collector
-curl -X POST http://localhost:3090/reports \
-  -H "Authorization: Bearer $STATUS_INGEST_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"service":"example","runtime":{"node":"v22.11.0","os":{"id":"ubuntu","versionId":"24.04","prettyName":"Ubuntu 24.04 LTS"}},"checks":[{"id":"up","name":"Up","status":"ok","message":"yes"}]}'
-
-# Self-report once
-npm run report-status
-```
-
-No Prometheus / scrape endpoints.
+See [agent/README.md](./agent/README.md) for systemd timer and scan roots.

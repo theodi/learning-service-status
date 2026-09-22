@@ -1,0 +1,14 @@
+[Unit]
+Description=ODI service-status host agent (one-shot)
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/odi-status-agent
+ExecStart=/usr/bin/node bin/odi-status-agent.js --once
+# EnvironmentFile=-/etc/odi-status-agent.env
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target

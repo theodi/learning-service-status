@@ -1,51 +1,34 @@
 <%- include('../partials/header') %>
 <main class="content-block docs-page">
   <h1 class="page-title">Agent playbook</h1>
-  <p class="page-lede">Machine-oriented steps to add status push to an ODI Node.js app. Do not invent a pull-only monitoring API.</p>
+  <p class="page-lede">Machine-oriented steps to deploy the host status agent. Do not add in-app status reporters to each service.</p>
 
   <nav class="docs-nav" aria-label="Documentation">
     <a href="/docs">Overview</a>
     <a href="/docs/agent">Agent playbook</a>
     <a href="/docs/spec">SPEC</a>
-    <a href="/client/odi-status-node.zip">Download Node client (zip)</a>
   </nav>
 
   <ol class="agent-steps">
-    <li>Download <code>/client/odi-status-node.zip</code> or copy files from <code>/client/node/</code> into the app under <code>lib/odi-status/</code>.</li>
-    <li>Read <code>lib/odi-status/INTEGRATE.md</code> in the app after copy.</li>
-    <li>Add <code>startStatusReporter({ service, version, cwd, getChecks })</code> when the HTTP server starts (after listen). Use a stable <code>service</code> id (deployment identity). Set <code>cwd</code> to the directory that contains <code>package-lock.json</code>.</li>
-    <li><strong>Required:</strong> leave <code>runtime</code> and <code>dependencies</code> enabled (defaults) so Node/OS versions and lockfiles are sent. Do <strong>not</strong> run <code>npm audit</code> in the app — the collector does that.</li>
-    <li><strong>Required for this app:</strong> list every external dependency (DB, email, HubSpot, AI providers, Django/upstream APIs, queues, storage, OAuth, payment providers, …). For each, add a check that probes it when possible (not only “env is set”).</li>
-    <li>Do <strong>not</strong> score Node/OS LTS in the app. The collector injects <code>node_runtime</code> / <code>operating_system</code> / <code>npm_audit</code>.</li>
-    <li>Document env vars: <code>STATUS_REPORT_URL</code>, <code>STATUS_REPORT_KEY</code>, optional <code>STATUS_REPORT_INTERVAL_MS</code>. If unset, reporter must no-op.</li>
-    <li>Never crash the process on push failure; log a warning only. Never put Google auth on ingest. Never commit the ingest key.</li>
-    <li>Optional CLI: <code>node lib/odi-status/scripts/report-status.js --service=&lt;id&gt;</code> with env set.</li>
-    <li>Acceptance: HTTP 200 from <code>POST /reports</code>; dashboard shows <code>node_runtime</code>, <code>operating_system</code>, <code>npm_audit</code>, and this app’s integration checks — without the app having an <code>npm</code> binary.</li>
+    <li>Copy the collector repo’s <code>agent/</code> directory to the server (e.g. <code>/opt/odi-status-agent</code>).</li>
+    <li><code>npm install</code> in that directory. Requires Node ≥ 20.17.</li>
+    <li>Create <code>config.json</code> (from <code>config.json.example</code>): <code>statusReportUrl</code>, <code>statusReportKey</code>, <code>hostId</code>, <code>scanRoots</code> (array of paths). Legacy <code>config.env</code> is used only if <code>config.json</code> is missing.</li>
+    <li>On the collector Configure page, allowlist this server’s egress IP.</li>
+    <li>Run <code>npm run once</code> and confirm HTTP 200; dashboard shows <code>host:&lt;hostId&gt;</code> and nested apps.</li>
+    <li>Install systemd timer from <code>agent/systemd/</code> (hourly) or run <code>npm start</code> as a long-lived process.</li>
+    <li>Ensure Apache (if used) sets <code>X-Forwarded-Proto https</code> for the collector; agent push is outbound HTTPS to the collector and does not need Apache.</li>
+    <li>Remove any in-app <code>startStatusReporter</code> / <code>STATUS_REPORT_*</code> wiring from apps on this host.</li>
+    <li>Acceptance: after one hour, reports are not stale; host checks include apt/reboot + OS LTS; apps show process + connector checks + agent <code>npm_audit</code>; collector injects Node/npm LTS on apps.</li>
   </ol>
 
   <section class="docs-section">
-    <h2>Example integration checks</h2>
+    <h2>Discovery rules</h2>
     <ul>
-      <li><code>mongo</code> / <code>postgres</code> — connect with app credentials</li>
-      <li><code>email</code> / <code>smtp</code> / <code>sendgrid</code> — provider key or SMTP handshake</li>
-      <li><code>hubspot</code> — authenticated HubSpot API call</li>
-      <li><code>openai</code> / <code>ai</code> — AI provider key works (cheap call)</li>
-      <li><code>django</code> / upstream HTTP — dependent service responds</li>
-      <li><code>redis</code>, <code>s3</code>, <code>stripe</code>, <code>queue</code>, OAuth clients — same idea</li>
-    </ul>
-  </section>
-
-  <section class="docs-section">
-    <h2>Files in the sample client</h2>
-    <ul>
-      <li><code>index.js</code> — exports</li>
-      <li><code>detectRuntime.js</code> — versions only (required payload)</li>
-      <li><code>readDependencies.js</code> — read package.json + package-lock.json</li>
-      <li><code>buildReport.js</code> — assemble report</li>
-      <li><code>statusReporter.js</code> — interval push</li>
-      <li><code>checks/npmAudit.js</code> — optional local audit helper (not required; collector audits lockfiles)</li>
-      <li><code>scripts/report-status.js</code> — one-shot push</li>
-      <li><code>INTEGRATE.md</code> — short checklist</li>
+      <li>Walk <code>scanRoots</code> up to <code>scanDepth</code> (default 4).</li>
+      <li>Any directory with <code>package.json</code> is an app (<code>node_modules</code> skipped).</li>
+      <li>Connectors: probe when env keys exist in the app’s <code>config.env</code> then <code>.env</code> (Mongo via <code>MONGO_URI</code>/<code>MONGODB_URI</code>/<code>MONGO_URL</code>, HubSpot, Forecast, Moodle, Gmail/Calendar, email OAuth2/SMTP, OpenAI/AI, OAuth/session/webhook presence).</li>
+      <li>Per app: run <code>npm audit --json</code> with the npm next to the app’s Node binary when known (else <code>npm</code> on <code>PATH</code>). Collector does not re-audit.</li>
+      <li>Host report: OS / apt / reboot only. Node and npm are per-app (nvm-aware).</li>
     </ul>
   </section>
 </main>

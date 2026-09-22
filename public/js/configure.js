@@ -2,14 +2,23 @@
   var root = document.getElementById('configure-root');
   if (!root) return;
 
-  function envSnippetText(el, revealed) {
+  function jsonSnippetText(el, revealed) {
     var url = el.getAttribute('data-url') || '';
     var key = el.getAttribute('data-key') || '';
     return (
-      'STATUS_REPORT_URL=' +
+      '{\n' +
+      '  "statusReportUrl": "' +
       url +
-      '\nSTATUS_REPORT_KEY=' +
-      (revealed ? key : '••••••••')
+      '",\n' +
+      '  "statusReportKey": "' +
+      (revealed ? key : '••••••••') +
+      '",\n' +
+      '  "hostId": "learndata-1",\n' +
+      '  "scanRoots": [\n' +
+      '    "/var/www/example-app"\n' +
+      '  ],\n' +
+      '  "intervalMs": 3600000\n' +
+      '}'
     );
   }
 
@@ -52,8 +61,8 @@
       revealBtn.textContent = next ? 'Hide' : 'Show';
       code.textContent = next ? secret : '••••••••';
       code.setAttribute('aria-label', next ? 'Ingest key' : 'Ingest key (hidden)');
-      var snippet = document.getElementById('config-env-snippet');
-      if (snippet) snippet.textContent = envSnippetText(snippet, next);
+      var snippet = document.getElementById('config-json-snippet');
+      if (snippet) snippet.textContent = jsonSnippetText(snippet, next);
       return;
     }
 
@@ -66,16 +75,10 @@
       return;
     }
 
-    if (copyBtn.getAttribute('data-copy-env')) {
-      var envEl = document.getElementById(copyBtn.getAttribute('data-copy-env'));
-      if (envEl) {
-        copyText(
-          'STATUS_REPORT_URL=' +
-            (envEl.getAttribute('data-url') || '') +
-            '\nSTATUS_REPORT_KEY=' +
-            (envEl.getAttribute('data-key') || ''),
-          copyBtn
-        );
+    if (copyBtn.getAttribute('data-copy-json')) {
+      var jsonEl = document.getElementById(copyBtn.getAttribute('data-copy-json'));
+      if (jsonEl) {
+        copyText(jsonSnippetText(jsonEl, true), copyBtn);
       }
       return;
     }

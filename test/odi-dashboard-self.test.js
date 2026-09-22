@@ -11,7 +11,7 @@ const {
 const {
   sortDashboardRows,
   summarizeFleet,
-  withSelfExpected,
+  groupRowsByHost,
 } = require('../lib/dashboard');
 const { buildDashboardRows } = require('../lib/validateReport');
 const {
@@ -74,11 +74,14 @@ describe('odiStaff', () => {
 });
 
 describe('dashboard helpers', () => {
-  it('always includes service-status in expected', () => {
-    assert.deepEqual(withSelfExpected(['care.theodi.org']), [
-      'care.theodi.org',
-      'service-status',
+  it('groups rows by host', () => {
+    const groups = groupRowsByHost([
+      { service: 'host:a', host: 'a', overall: 'ok', stale: false, checks: [] },
+      { service: 'app', host: 'a', overall: 'fail', stale: false, checks: [] },
     ]);
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0].overall, 'fail');
+    assert.equal(groups[0].apps[0].service, 'app');
   });
 
   it('sorts fail before warn before ok', () => {
@@ -109,8 +112,8 @@ describe('dashboard helpers', () => {
   it('shows many expected services as stale when empty store', () => {
     const rows = buildDashboardRows({
       storeEntries: {},
-      expectedServices: withSelfExpected(['care.theodi.org', 'other.app']),
-      staleAfterMs: 900000,
+      expectedServices: ['care.theodi.org', 'other.app', 'host:x'],
+      staleAfterMs: 7200000,
       now: new Date(),
     });
     assert.equal(rows.length, 3);
@@ -154,7 +157,7 @@ describe('selfReport', () => {
     assert.equal(check.status, 'ok');
   });
 
-  it('builds a self report with runtime and lockfiles (audit on enrich)', async () => {
+  it('builds a self report with runtime (audit from agent-style check)', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ss-self-'));
     const storePath = path.join(dir, 'reports.json');
     const now = new Date('2026-09-21T12:00:00.000Z');
@@ -164,10 +167,7 @@ describe('selfReport', () => {
       expectedServices: ['care.theodi.org', 'service-status'],
       staleAfterMs: 900000,
       storeEntries: {},
-      dependencies: {
-        packageJson: { name: 'service-status', version: '1.0.0' },
-        packageLock: { lockfileVersion: 3, packages: {} },
-      },
+      includeDependencies: false,
       packageJson: { version: '1.0.0' },
       instance: 'test',
       nowMs: now.getTime(),
@@ -181,16 +181,23 @@ describe('selfReport', () => {
         release: '6.8.0',
         id: 'ubuntu',
       },
+      npmAuditCheck: {
+        id: 'npm_audit',
+        name: 'npm audit',
+        status: 'ok',
+        message: '0 vulnerabilities',
+        detail: { source: 'agent', total: 0 },
+      },
     });
     assert.equal(report.service, 'service-status');
     assert.ok(report.runtime);
     assert.equal(report.runtime.node, 'v22.23.2');
-    assert.ok(report.dependencies);
-    assert.equal(report.dependencies.packageLock.lockfileVersion, 3);
+    assert.ok(!report.dependencies);
     assert.ok(!report.checks.some((c) => c.id === 'node_runtime'));
-    assert.ok(!report.checks.some((c) => c.id === 'npm_audit'));
+    assert.ok(report.checks.some((c) => c.id === 'npm_audit' && c.detail.source === 'agent'));
     assert.ok(report.checks.some((c) => c.id === 'process'));
 
+    report.runtime.npm = '10.9.0';
     const { enrichReportWithRuntime } = require('../lib/enrichRuntime');
     const { enrichReportWithNpmAudit } = require('../lib/enrichNpmAudit');
     let enriched = await enrichReportWithRuntime(report, {
@@ -198,23 +205,15 @@ describe('selfReport', () => {
       nodeCycles: [
         { cycle: '22', lts: '2024-10-29', eol: '2027-04-30', latest: '22.23.2' },
       ],
-      osCycles: [{ cycle: '24.04', lts: true, eol: '2029-04-25' }],
+      npmLatestMajor: 10,
     });
-    enriched = await enrichReportWithNpmAudit(enriched, {
-      useCache: false,
-      auditCheck: {
-        id: 'npm_audit',
-        name: 'npm audit',
-        status: 'ok',
-        message: '0 vulnerabilities',
-        detail: { source: 'collector' },
-      },
-    });
+    enriched = await enrichReportWithNpmAudit(enriched);
     assert.ok(enriched.checks.some((c) => c.id === 'node_runtime' && c.status === 'ok'));
-    assert.ok(enriched.checks.some((c) => c.id === 'operating_system' && c.status === 'ok'));
+    assert.ok(enriched.checks.some((c) => c.id === 'npm_runtime' && c.status === 'ok'));
+    assert.ok(!enriched.checks.some((c) => c.id === 'operating_system'));
     assert.ok(
       enriched.checks.some(
-        (c) => c.id === 'npm_audit' && c.status === 'ok' && c.detail.source === 'collector'
+        (c) => c.id === 'npm_audit' && c.status === 'ok' && c.detail.source === 'agent'
       )
     );
   });

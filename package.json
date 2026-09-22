@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js",
-    "test": "node --test test/*.test.js",
+    "test": "node --test test/*.test.js && node --test agent/test/*.test.js",
     "report-status": "node scripts/report-status.js"
   },
   "license": "MIT",
@@ -14,7 +14,6 @@
     "node": ">=20.17"
   },
   "dependencies": {
-    "@npmcli/arborist": "^9.9.1",
     "ejs": "^6.0.1",
     "express": "^5.2.1",
     "express-ejs-layouts": "^2.5.1",

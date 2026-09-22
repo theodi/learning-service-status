@@ -1,23 +1,24 @@
 <%- include('../partials/header') %>
 <main class="content-block" id="configure-root">
   <h1 class="page-title">Configure</h1>
-  <p class="page-lede">Client env for apps that push status, and the ingest IP allowlist. Pushing uses the shared ingest key (no Google). Localhost is always allowed.</p>
+  <p class="page-lede">Host agent connection details and the ingest IP allowlist. Pushing uses the shared ingest key (no Google). Localhost is always allowed.</p>
 
   <% if (!clientConfig.ingestKey) { %>
   <p class="empty">STATUS_INGEST_KEY is not set on this collector — pushes will fail until it is configured.</p>
   <% } else { %>
   <div class="client-config-body is-page">
-    <h2 class="config-heading">Client environment</h2>
+    <h2 class="config-heading">Host agent config</h2>
+    <p class="allowlist-lede">Put these values in the agent’s <code>config.json</code> (<code>statusReportUrl</code> / <code>statusReportKey</code>). Prefer the JSON snippet below.</p>
     <dl class="config-fields">
       <div class="config-field">
-        <dt>STATUS_REPORT_URL</dt>
+        <dt>statusReportUrl</dt>
         <dd>
           <code class="config-value" id="config-report-url"><%= clientConfig.reportUrl %></code>
           <button type="button" class="config-copy" data-copy-target="config-report-url">Copy</button>
         </dd>
       </div>
       <div class="config-field">
-        <dt>STATUS_REPORT_KEY</dt>
+        <dt>statusReportKey</dt>
         <dd>
           <code
             class="config-value is-secret"
@@ -32,12 +33,19 @@
     </dl>
     <pre
       class="config-snippet"
-      id="config-env-snippet"
+      id="config-json-snippet"
       data-url="<%= clientConfig.reportUrl %>"
       data-key="<%= clientConfig.ingestKey %>"
-    >STATUS_REPORT_URL=<%= clientConfig.reportUrl %>
-STATUS_REPORT_KEY=••••••••</pre>
-    <button type="button" class="config-copy" data-copy-env="config-env-snippet">Copy env block</button>
+    >{
+  "statusReportUrl": "<%= clientConfig.reportUrl %>",
+  "statusReportKey": "••••••••",
+  "hostId": "learndata-1",
+  "scanRoots": [
+    "/var/www/example-app"
+  ],
+  "intervalMs": 3600000
+}</pre>
+    <button type="button" class="config-copy" data-copy-json="config-json-snippet">Copy JSON snippet</button>
   </div>
   <% } %>
 

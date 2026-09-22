@@ -4,7 +4,7 @@
  * Copy this folder into your app (e.g. lib/odi-status/) or download
  * /client/odi-status-node.zip from the collector.
  *
- * Collector scores Node/OS LTS from `runtime` and npm audit from `dependencies`
+ * Collector scores Node/OS LTS from `runtime`. Prefer host-agent `npm_audit` over lockfile POST.
  * (package.json + package-lock.json). No npm binary required in the app.
  */
 

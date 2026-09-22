@@ -14,11 +14,10 @@ const {
   sortDashboardRows,
   summarizeFleet,
   formatAge,
-  withSelfExpected,
+  groupRowsByHost,
 } = require('./lib/dashboard');
 const { requireAuthHtml, requireAuthJson, isOdiStaffEmail } = require('./lib/odiStaff');
 const { configurePassport, isGoogleConfigured } = require('./lib/passport');
-const { startSelfReporter } = require('./lib/selfReport');
 const { enrichReportWithRuntime } = require('./lib/enrichRuntime');
 const { enrichReportWithNpmAudit } = require('./lib/enrichNpmAudit');
 const { renderSimpleMarkdown } = require('./lib/simpleMarkdown');
@@ -60,11 +59,9 @@ loadEnvFile(configEnvPath);
 
 const PORT = parseInt(process.env.PORT || '3090', 10);
 const INGEST_KEY = process.env.STATUS_INGEST_KEY || '';
-const STALE_AFTER_MS = parseInt(process.env.STALE_AFTER_MS || '900000', 10);
-const SELF_INTERVAL_MS = parseInt(process.env.SELF_REPORT_INTERVAL_MS || '300000', 10);
-const EXPECTED_SERVICES = withSelfExpected(
-  parseExpectedServices(process.env.EXPECTED_SERVICES || '')
-);
+// Default 2h — host agents push hourly
+const STALE_AFTER_MS = parseInt(process.env.STALE_AFTER_MS || '7200000', 10);
+const EXPECTED_SERVICES = parseExpectedServices(process.env.EXPECTED_SERVICES || '');
 const STORE_PATH =
   process.env.REPORTS_STORE_PATH || path.join(root, 'data', 'reports.json');
 const SETTINGS_PATH =
@@ -84,7 +81,7 @@ app.set('layout', 'layout');
 // Trust X-Forwarded-For / proto from Cloudflare edges or local reverse proxy (Apache).
 app.set('trust proxy', expressTrustProxy);
 
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false }));
 app.use(express.static(path.join(root, 'public')));
 app.use('/client/node', express.static(path.join(root, 'client', 'node')));
@@ -121,12 +118,13 @@ function getDashboardPayload() {
     buildDashboardRows({
       storeEntries: store.getAll(),
       expectedServices: EXPECTED_SERVICES,
-      staleAfterMs: Number.isFinite(STALE_AFTER_MS) ? STALE_AFTER_MS : 900000,
+      staleAfterMs: Number.isFinite(STALE_AFTER_MS) ? STALE_AFTER_MS : 7200000,
       now: new Date(),
     })
   );
   const summary = summarizeFleet(rows);
-  return { services: rows, summary };
+  const hosts = groupRowsByHost(rows);
+  return { services: rows, hosts, summary };
 }
 
 app.get('/login', (req, res) => {
@@ -181,11 +179,11 @@ function publicBaseUrl(req) {
 }
 
 app.get('/', requireAuthHtml, (req, res) => {
-  const { services, summary } = getDashboardPayload();
+  const { services, hosts, summary } = getDashboardPayload();
   res.locals.page = { title: 'Service status' };
   res.locals.navActive = 'status';
   res.locals.metaRefresh = 0; // JS refresh instead
-  res.render('pages/dashboard', { services, summary });
+  res.render('pages/dashboard', { services, hosts, summary });
 });
 
 app.get('/configure', requireAuthHtml, (req, res) => {
@@ -251,8 +249,8 @@ app.get('/client/odi-status-node.zip', (req, res) => {
 });
 
 app.get('/reports', requireAuthJson, (req, res) => {
-  const { services, summary } = getDashboardPayload();
-  res.json({ services, summary });
+  const { services, hosts, summary } = getDashboardPayload();
+  res.json({ services, hosts, summary });
 });
 
 app.post('/reports', async (req, res) => {
@@ -327,19 +325,11 @@ if (!INGEST_KEY) {
   console.warn('WARNING: STATUS_INGEST_KEY is not set — POST /reports will return 500 until configured.');
 }
 
-startSelfReporter(store, {
-  storePath: STORE_PATH,
-  expectedServices: EXPECTED_SERVICES,
-  staleAfterMs: Number.isFinite(STALE_AFTER_MS) ? STALE_AFTER_MS : 900000,
-  ingestKey: INGEST_KEY,
-  intervalMs: Number.isFinite(SELF_INTERVAL_MS) && SELF_INTERVAL_MS >= 30000 ? SELF_INTERVAL_MS : 300000,
-});
-
 // Bind loopback only — required if we trust forwarded headers from localhost peers.
 const LISTEN_HOST = process.env.LISTEN_HOST || '127.0.0.1';
 app.listen(PORT, LISTEN_HOST, () => {
   console.log(`service-status listening on http://${LISTEN_HOST}:${PORT}`);
-  console.log(`  expected: ${EXPECTED_SERVICES.join(', ')}`);
+  console.log(`  expected: ${EXPECTED_SERVICES.join(', ') || '(none)'}`);
   console.log(`  stale after: ${STALE_AFTER_MS}ms`);
   console.log(`  store: ${STORE_PATH}`);
 });

@@ -1,8 +1,8 @@
 # Service status push convention
 
-Language-agnostic convention: each service runs its own checks and **pushes** a JSON report to a central collector. The collector does not scrape monitored apps. Prometheus / metrics scrapes are out of scope.
+Language-agnostic convention: a **host agent** on each server discovers apps, runs checks, and **pushes** JSON reports to a central collector. The collector does not scrape monitored apps. Prometheus / metrics scrapes are out of scope.
 
-Public integration docs and the downloadable Node sample client live on the collector site (`/docs`, `/client`) — not in a personal IDE skill.
+Public integration docs live on the collector site (`/docs`) — not in a personal IDE skill.
 
 ## Auth
 
@@ -32,141 +32,104 @@ Staff-only. Google OAuth; email host must be `theodi.org` (same rule as CARE adm
 
 ## Report body
 
+The host agent POSTs **one report per host** and **one report per discovered app** each run (typically hourly). Upsert key is `service`. All reports include `host` so the dashboard can nest apps under servers.
+
 ```json
 {
   "service": "care.theodi.org",
+  "host": "learndata-1",
   "version": "3.0.0",
   "reportedAt": "2026-09-21T13:00:00.000Z",
-  "instance": "optional-host-or-env",
   "runtime": {
     "node": "v20.11.1",
-    "os": {
-      "id": "ubuntu",
-      "versionId": "22.04",
-      "prettyName": "Ubuntu 22.04.4 LTS"
-    }
-  },
-  "dependencies": {
-    "packageJson": { "name": "care.theodi.org", "version": "3.0.0" },
-    "packageLock": { "lockfileVersion": 3, "packages": {} }
+    "npm": "10.9.0"
   },
   "checks": [
     {
-      "id": "mongo",
-      "name": "MongoDB",
+      "id": "process",
+      "name": "Process",
       "status": "ok",
-      "message": "connected (care)",
+      "message": "running (pid 1234)",
       "detail": {}
+    },
+    {
+      "id": "npm_audit",
+      "name": "npm audit",
+      "status": "ok",
+      "message": "0 vulnerabilities",
+      "detail": { "source": "agent", "engine": "npm", "total": 0 }
     }
   ]
 }
 ```
 
+Host machine reports use `service`: `host:<hostId>` (same `host` field) and send `runtime.os` only (no Node/npm).
+
 ### Fields
 
 | Field | Required | Notes |
 |-------|----------|--------|
-| `service` | yes | Stable id (package name / deployment identity). Used as the upsert key. |
+| `service` | yes | Stable id. Apps: package name / deployment identity. Hosts: `host:<id>`. Upsert key. |
+| `host` | yes | Stable server id (hostname or configured `hostId`). Used to nest apps on the dashboard. |
 | `version` | no | App version string. |
-| `reportedAt` | no | ISO-8601 when the client built the report. Collector also stores `receivedAt`. |
-| `instance` | no | Host, region, or process id when useful. |
-| `runtime` | **yes (Node)** | Raw versions only. Must include `node` and `os`. Collector scores LTS/EOL and injects `node_runtime` / `operating_system`. |
-| `dependencies` | **yes (Node)** | `packageJson` + `packageLock` (npm). Collector runs `npm audit` and injects `npm_audit`. Apps do **not** need the `npm` binary. |
-| `checks` | yes | App-owned tests (connections, integrations). Do **not** require client-side `npm_audit`. |
+| `reportedAt` | no | ISO-8601 when the agent built the report. Collector also stores `receivedAt`. |
+| `instance` | no | Optional extra instance label. |
+| `runtime` | **yes (Node apps / hosts)** | Apps: `node` + `npm`. Hosts: `os`. Collector scores LTS from these. |
+| `dependencies` | no | Deprecated. Previously used for collector-side Arborist audit; agents now run `npm audit` locally. |
+| `checks` | yes | Agent-owned probes (process, connectors, **`npm_audit`**, apt/reboot on host reports). |
 
-JSON body limit for ingest is **5mb** (lockfiles can be large).
+JSON body limit for ingest is **1mb** (lockfiles are no longer required).
 
-### `runtime` object (required on Node services)
-
-| Field | Required | Notes |
-|-------|----------|--------|
-| `node` | yes | Node version string (e.g. `v20.11.1` or `20.11.1`). |
-| `os` | yes | Object: `id` (os-release `ID`), `versionId` (`VERSION_ID`), `prettyName` (`PRETTY_NAME`). Optional `product` / `platform` / `release` help the collector. |
-
-### `dependencies` object (required on Node / npm services)
+### `runtime` object
 
 | Field | Required | Notes |
 |-------|----------|--------|
-| `packageJson` | yes | Object or UTF-8 JSON string — contents of `package.json`. |
-| `packageLock` | yes | Object or UTF-8 JSON string — contents of `package-lock.json` (or npm-shrinkwrap). |
+| `node` | for apps | Node version of the running process when known. |
+| `npm` | for apps | npm version (prefer the binary next to the app’s Node). |
+| `os` | for hosts | Object: `id`, `versionId`, `prettyName`. Not required on apps. |
 
-Yarn / pnpm lockfiles are out of scope for this collector path.
+### `dependencies` object (deprecated)
+
+Optional legacy field. Collector ignores it for scoring.
 
 ### Check object
 
 | Field | Required | Notes |
 |-------|----------|--------|
-| `id` | yes | Stable slug within the service (`mongo`, `npm_audit`, …). |
+| `id` | yes | Stable slug within the service (`process`, `mongodb`, `apt`, `npm_audit`, …). |
 | `name` | yes | Human label. |
 | `status` | yes | One of `ok`, `warn`, `fail`. |
 | `message` | yes | Short human-readable outcome. |
-| `detail` | no | Arbitrary JSON for machine consumers (counts, codes). |
+| `detail` | no | Arbitrary JSON. |
 
-## Required on every Node service
+## Host agent (preferred integration)
 
-| Requirement | How |
-|-------------|-----|
-| Node version | `runtime.node` → collector injects `node_runtime` |
-| OS version | `runtime.os` → collector injects `operating_system` |
-| Dependency audit | `dependencies.packageJson` + `dependencies.packageLock` → collector injects `npm_audit` (in-process via `@npmcli/arborist`; no `npm` binary) |
+Run one agent per server (typically as root via systemd). Configure with **`config.json`** (`statusReportUrl`, `statusReportKey`, `hostId`, `scanRoots` array). Legacy `config.env` works if JSON is absent.
 
-Clients under `www-data` should **read** lockfiles from disk and send them — they must not run `npm audit` themselves. The collector also does not need a system `npm` binary (Arborist is a dependency).
+The agent:
 
-If `runtime` or `dependencies` is missing, the collector still accepts the push but injects **warn** placeholders. Legacy: if `dependencies` is omitted but the client already sent a scored `npm_audit` check, that check is kept.
+1. Checks the machine (OS, apt upgrades, reboot-required).
+2. Scans `scanRoots` for Node apps (`package.json`).
+3. For each app: process up?, Node/npm versions (using the app’s Node binary when known), **`npm audit --json` in the app directory**, connectors inferred from the app’s `config.env` / `.env`.
+4. POSTs host + app reports to this collector (~hourly).
 
-## What else to check (app-owned)
+See `/docs/agent` and the `agent/` package in this repository.
 
-Anything where an **external dependency or integration** can break the app should have a check. Prefer a real probe (ping, auth call, send test, list resources) over “env var is set”.
+Apps should **not** embed their own status reporters.
 
-Examples (include those that apply to **this** service):
+## Collector-side scoring
 
-| Example `id` | What to verify |
-|--------------|----------------|
-| `mongo` / `postgres` / `mysql` / `redis` | Database reachable with the app’s credentials |
-| `django` / `upstream_api` | Dependent HTTP/API services respond |
-| `email` / `smtp` / `sendgrid` / `mailgun` | Mail provider configured and usable (API key valid / SMTP handshake) |
-| `hubspot` | HubSpot API key works (e.g. lightweight authenticated request) |
-| `openai` / `anthropic` / `ai` | AI provider API key works (cheap no-op or models list) |
-| `stripe` / `payment` | Payment provider credentials valid |
-| `s3` / `gcs` / `storage` | Object storage reachable with configured credentials |
-| `queue` / `rabbit` / `sqs` | Message broker connectivity |
-| `oauth_google` / `oauth_*` | OAuth client config present and token endpoint reachable when testable |
-
-Rule of thumb: if the app needs an **API key, secret, or network hop** to a third party or shared infrastructure, add a check. Do not invent checks for libraries that are purely in-process with no external dependency.
-
-## Collector-side Node / OS LTS
-
-The collector evaluates Node and OS support using [endoflife.date](https://endoflife.date) (cached in-process):
-
-| Check id | Source | Pass rule |
-|----------|--------|-----------|
-| `node_runtime` | `runtime.node` | Active **LTS** with &gt;6 months to EOL → `ok`; LTS with ≤6 months → `warn`; non-LTS / EOL / unknown → `fail` |
-| `operating_system` | `runtime.os` | Same LTS window; unknown platform → `warn` |
-
-If the EOL API is unreachable, the collector emits `warn` with the version still in `message` / `detail`.
-
-**Compatibility:** If `runtime` is omitted but the client already sent `node_runtime` / `operating_system` checks (legacy), those checks are kept. Prefer sending `runtime` and omitting those check ids.
+| Report kind | Collector injects |
+|-------------|-------------------|
+| Host (`service` `host:<id>`) | `operating_system` (LTS from `runtime.os`). No Node/npm LTS, no `npm_audit`. |
+| App | `node_runtime` (LTS), `npm_runtime` (major vs latest on registry). Preserves agent `npm_audit`. No OS check. |
 
 ## Stale detection
 
-The collector tracks the last accepted report per `service`. If nothing is received within `STALE_AFTER_MS` (default 15 minutes), the dashboard shows a warning such as “no report received”.
+The collector tracks the last accepted report per `service`. If nothing is received within `STALE_AFTER_MS` (default **2 hours**, for hourly agents), the dashboard shows a warning such as “no report received”.
 
-Configure `EXPECTED_SERVICES` (comma-separated) so services that never phone home still appear as stale. The collector always includes itself as `service-status`.
+Configure `EXPECTED_SERVICES` (comma-separated) so hosts and apps that never phone home still appear as stale (e.g. `host:learndata-1,care.theodi.org`).
 
-## Collector self-reporting
+## Dashboard
 
-The collector upserts its own report (`service`: `service-status`) on an interval (`SELF_REPORT_INTERVAL_MS`), including process uptime, `runtime` and `dependencies` (scored on upsert), ingest key presence, store writability, expected-services config, and fleet activity. One-shot: `npm run report-status`.
-
-## Client guidance
-
-- Gate the reporter on env (`STATUS_REPORT_URL` + `STATUS_REPORT_KEY`); if unset, do nothing.
-- Never crash the app if the collector is down; log a warning.
-- Do **not** expose a public status URI as the monitoring plane (local k8s `/health` for orchestration is fine separately).
-- Prefer push over inventing a pull-only monitoring API.
-- **Required:** `runtime` (node + os) and `dependencies` (`package.json` + `package-lock.json` contents), plus probes for every external integration the app depends on.
-- Do **not** require the `npm` binary in the app or collector process (Arborist audits lockfiles in-process).
-- Use the public sample client: `/client/node/` or `/client/odi-status-node.zip`.
-
-## Reference client
-
-Downloadable Node sample on this collector: `/docs` and `/client/odi-status-node.zip`. CARE may still push as a fleet member; new integrations should follow the sample client, not copy CARE internals.
+Rows are grouped by `host`. Each host section shows the machine report (`host:<id>`) and nested app reports.

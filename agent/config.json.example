@@ -1,0 +1,13 @@
+{
+  "statusReportUrl": "https://status.example.org/reports",
+  "statusReportKey": "replace-with-ingest-key",
+  "hostId": "learndata-1",
+  "scanDepth": 2,
+  "intervalMs": 3600000,
+  "scanRoots": [
+    "/var/www/care.theodi.org",
+    "/var/www/learning-orchestrator",
+    "/home/deploy/node-projects/contracts-finder",
+    "/home/deploy/node-projects/ld-demo"
+  ]
+}

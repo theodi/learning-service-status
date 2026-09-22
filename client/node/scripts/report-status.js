@@ -3,8 +3,8 @@
  * One-shot push: node scripts/report-status.js
  * Requires STATUS_REPORT_URL, STATUS_REPORT_KEY, and --service=id
  *
- * Sends runtime + lockfiles by default (collector runs npm audit).
- * Optional: --local-audit to also include a client-side npm_audit check.
+ * Sends runtime by default. Optional: --local-audit to include a client-side npm_audit check.
+ * Note: prefer the host agent; collector no longer audits lockfiles.
  *
  * Usage from an app that copied this client:
  *   node lib/odi-status/scripts/report-status.js --service=my-app --version=1.0.0

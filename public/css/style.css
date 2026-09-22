@@ -581,16 +581,58 @@ button.stat-box:focus-visible {
   outline-offset: 1px;
 }
 
-/* —— Service list —— */
-.service-list {
+/* —— Service / host list —— */
+.service-list,
+.host-list {
   display: flex;
   flex-direction: column;
   gap: 0;
 }
 
+.host-group {
+  border-top: 2px solid var(--border);
+  padding: 1rem 0 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.host-name {
+  margin: 0;
+  font-size: 1.35rem;
+  color: var(--heading);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 1.05rem;
+}
+
+.host-body {
+  margin: 0.5rem 0 0 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-left: 2px solid var(--border);
+  padding-left: 0.85rem;
+}
+
+.host-group[data-collapsed='true'] .host-body {
+  display: none;
+}
+
 .service {
   border-top: 1px solid var(--border);
   padding: 0.75rem 0;
+}
+
+.service.is-host {
+  border-top: none;
+  background: var(--bg-muted, transparent);
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.service.is-host .service-name {
+  font-size: 1rem;
+  font-weight: 600;
 }
 
 .service-summary {

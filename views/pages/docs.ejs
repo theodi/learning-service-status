@@ -1,88 +1,55 @@
 <%- include('../partials/header') %>
 <main class="content-block docs-page">
   <h1 class="page-title">Integrate service status</h1>
-  <p class="page-lede">Push health checks from ODI services to this collector. Public docs and the Node sample client — no login required here. The ingest key is only on the staff Configure page.</p>
+  <p class="page-lede">A host agent on each server discovers apps, runs checks, and pushes reports to this collector. Public docs — no login required. The ingest key is only on the staff Configure page.</p>
 
   <nav class="docs-nav" aria-label="Documentation">
     <a href="/docs">Overview</a>
     <a href="/docs/agent">Agent playbook</a>
     <a href="/docs/spec">SPEC</a>
-    <a href="/client/odi-status-node.zip">Download Node client (zip)</a>
-    <a href="/client/node/INTEGRATE.md">Browse INTEGRATE.md</a>
   </nav>
 
   <section class="docs-section">
     <h2>How it works</h2>
     <ol>
-      <li>Each app builds a JSON report with a stable <code>service</code> id, required <code>runtime</code> versions, required <code>dependencies</code> (lockfiles), and probes for external integrations.</li>
-      <li>The app POSTs to <code>/reports</code> with the shared ingest key (no Google login).</li>
-      <li>This collector scores Node/OS LTS and audits lockfiles in-process (Arborist), then shows the fleet on the staff dashboard.</li>
+      <li>Install the <strong>host agent</strong> on each server (runs as root / systemd, typically hourly).</li>
+      <li>The agent checks the machine (OS, apt, reboot) and scans <code>scanRoots</code> for Node apps.</li>
+      <li>For each app it checks process, Node/npm version, <code>npm audit</code>, and connectors inferred from the app’s <code>config.env</code> / <code>.env</code>.</li>
+      <li>It POSTs one report for the host (<code>host:&lt;id&gt;</code>) and one per app, each including a <code>host</code> field so the dashboard nests apps under servers.</li>
     </ol>
+    <p>Apps should <strong>not</strong> embed their own status reporters.</p>
   </section>
 
   <section class="docs-section">
-    <h2>Required on every Node service</h2>
-    <ul>
-      <li><strong>Node version</strong> — <code>runtime.node</code> (sample client sends this automatically)</li>
-      <li><strong>OS version</strong> — <code>runtime.os</code> (automatic)</li>
-      <li><strong>Lockfiles</strong> — <code>dependencies.packageJson</code> + <code>dependencies.packageLock</code> (read from disk). Collector audits in-process (Arborist). <strong>No <code>npm</code> binary needed</strong> in the app or on the collector host beyond Node.</li>
-    </ul>
-    <p>The collector evaluates LTS/EOL and dependency advisories. Apps do not call endoflife.date or <code>npm audit</code>.</p>
-  </section>
-
-  <section class="docs-section">
-    <h2>Also check external integrations</h2>
-    <p>Anything where an external issue can break the app needs a check. Prefer a real probe (connection, authenticated API call, SMTP handshake) over “env var is set”.</p>
-    <ul>
-      <li><strong>Data stores</strong> — MongoDB, Postgres, MySQL, Redis, …</li>
-      <li><strong>Upstream apps / APIs</strong> — Django services, internal HTTP APIs</li>
-      <li><strong>Email</strong> — SendGrid, Mailgun, SMTP (API key / handshake works)</li>
-      <li><strong>CRM / marketing</strong> — HubSpot and similar (key authenticates)</li>
-      <li><strong>AI providers</strong> — OpenAI, Anthropic, etc. (key works; use a cheap call)</li>
-      <li><strong>Payments, storage, queues, OAuth</strong> — Stripe, S3/GCS, Rabbit/SQS, Google OAuth, …</li>
-    </ul>
-    <p>If the app needs an API key, secret, or network hop to a third party or shared infrastructure, add a check. Skip purely in-process libraries with no external dependency.</p>
-  </section>
-
-  <section class="docs-section">
-    <h2>Node sample client</h2>
-    <p>Copy the client into your app (e.g. <code>lib/odi-status/</code>) or unzip the download.</p>
-    <ul>
-      <li><a href="/client/odi-status-node.zip">odi-status-node.zip</a></li>
-      <li>Browse source: <a href="/client/node/">/client/node/</a></li>
-    </ul>
-    <pre class="config-snippet">const { startStatusReporter } = require('./lib/odi-status');
-
-startStatusReporter({
-  service: 'my-service-id',
-  version: require('./package.json').version,
-  cwd: __dirname,
-  getChecks: async () => [
-    await checkMongo(),      // example — your integrations
-    await checkHubspot(),
-    await checkEmail(),
-  ],
-});</pre>
-    <p>Environment (staff get the real values from <strong>Configure</strong> after sign-in):</p>
-    <pre class="config-snippet">STATUS_REPORT_URL=https://&lt;collector-host&gt;/reports
-STATUS_REPORT_KEY=&lt;ingest-key&gt;
-STATUS_REPORT_INTERVAL_MS=300000</pre>
-  </section>
-
-  <section class="docs-section">
-    <h2>Check shape</h2>
+    <h2>Host agent</h2>
+    <p>Source and README: repository <code>agent/</code> package (<code>odi-status-agent</code>).</p>
     <pre class="config-snippet">{
-  id: 'hubspot',
-  name: 'HubSpot',
-  status: 'ok', // ok | warn | fail
-  message: 'API key accepted',
-  detail: {}
+  "statusReportUrl": "https://&lt;collector-host&gt;/reports",
+  "statusReportKey": "&lt;ingest-key&gt;",
+  "hostId": "learndata-1",
+  "scanRoots": [
+    "/var/www/care.theodi.org",
+    "/home/deploy/node-projects/learning-orchestrator"
+  ],
+  "intervalMs": 3600000
 }</pre>
+    <p>Allowlist the server’s egress IP on <strong>Configure</strong>. Behind Cloudflare the collector uses <code>CF-Connecting-IP</code> automatically.</p>
   </section>
 
   <section class="docs-section">
-    <h2>For AI agents</h2>
-    <p>Follow the numbered playbook: <a href="/docs/agent">/docs/agent</a>. Canonical contract: <a href="/docs/spec">/docs/spec</a>.</p>
+    <h2>Report shape (summary)</h2>
+    <ul>
+      <li><code>service</code> — upsert key (app name or <code>host:&lt;id&gt;</code>)</li>
+      <li><code>host</code> — required server id for nesting</li>
+      <li><code>runtime</code> — collector scores Node/OS LTS; agent includes <code>npm_audit</code> in <code>checks</code></li>
+      <li><code>checks[]</code> — <code>ok|warn|fail</code></li>
+    </ul>
+    <p>Full contract: <a href="/docs/spec">/docs/spec</a>.</p>
+  </section>
+
+  <section class="docs-section">
+    <h2>Legacy in-app client</h2>
+    <p>The old downloadable <code>/client/node/</code> sample (push from inside each app) is deprecated. Prefer the host agent.</p>
   </section>
 </main>
 <%- include('../partials/footer') %>

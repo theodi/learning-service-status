@@ -9,3 +9,6 @@ data/*.tmp
 data/reports.json
 data/settings.json
 node_modules/
+agent/node_modules/
+agent/config.env
+agent/config.json

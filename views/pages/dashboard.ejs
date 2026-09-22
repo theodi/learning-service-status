@@ -35,47 +35,107 @@
   <div class="filters">
     <label>
       Search
-      <input type="search" id="filter-search" placeholder="Service name" aria-label="Search services">
+      <input type="search" id="filter-search" placeholder="Host or service name" aria-label="Search hosts and services">
     </label>
   </div>
 
-  <% if (!services.length) { %>
-  <p class="empty">No services yet. Set EXPECTED_SERVICES or wait for a push / self-report.</p>
+  <% if (!hosts || !hosts.length) { %>
+  <p class="empty">No reports yet. Set EXPECTED_SERVICES or wait for a host agent push.</p>
   <% } %>
 
-  <div class="service-list" id="service-list">
-    <% services.forEach(function (row) {
-      var expand = row.overall === 'fail' || row.overall === 'warn' || row.stale;
+  <div class="host-list" id="service-list">
+    <% (hosts || []).forEach(function (group) {
+      var groupExpand = group.overall === 'fail' || group.overall === 'warn' || group.stale;
     %>
     <section
-      class="service overall-<%= row.overall %>"
-      id="svc-<%= row.service %>"
-      data-service="<%= row.service %>"
-      data-overall="<%= row.overall %>"
-      data-stale="<%= row.stale ? 'true' : 'false' %>"
-      data-collapsed="<%= expand ? 'false' : 'true' %>"
+      class="host-group overall-<%= group.overall %>"
+      data-host="<%= group.host %>"
+      data-overall="<%= group.overall %>"
+      data-stale="<%= group.stale ? 'true' : 'false' %>"
+      data-collapsed="<%= groupExpand ? 'false' : 'true' %>"
     >
-      <button type="button" class="service-summary" aria-expanded="<%= expand ? 'true' : 'false' %>">
-        <span class="service-toggle" aria-hidden="true"><%= expand ? '▾' : '▸' %></span>
+      <button type="button" class="host-summary service-summary" aria-expanded="<%= groupExpand ? 'true' : 'false' %>">
+        <span class="service-toggle" aria-hidden="true"><%= groupExpand ? '▾' : '▸' %></span>
         <span>
-          <h2 class="service-name"><%= row.service %></h2>
+          <h2 class="host-name"><%= group.host %></h2>
           <p class="service-meta">
-            <% if (row.version) { %>v<%= row.version %> · <% } %>
-            <% if (row.instance) { %><%= row.instance %> · <% } %>
-            last <%= formatAge(row.ageMs) %>
+            <%= (group.hostRow ? 1 : 0) + group.apps.length %> report<%= ((group.hostRow ? 1 : 0) + group.apps.length) === 1 ? '' : 's' %>
           </p>
         </span>
-        <span class="service-badge"><%= row.overall %></span>
+        <span class="service-badge"><%= group.overall %></span>
       </button>
-      <ul class="checks">
-        <% row.checks.forEach(function (c) { %>
-        <li class="check check-<%= c.status %>">
-          <span class="check-status"><%= c.status %></span>
-          <span class="check-name"><%= c.name %></span>
-          <span class="check-msg"><%= c.message %></span>
-        </li>
+
+      <div class="host-body">
+        <% if (group.hostRow) {
+          var row = group.hostRow;
+          var expand = row.overall === 'fail' || row.overall === 'warn' || row.stale;
+        %>
+        <section
+          class="service is-host overall-<%= row.overall %>"
+          id="svc-<%= row.service %>"
+          data-service="<%= row.service %>"
+          data-host="<%= group.host %>"
+          data-overall="<%= row.overall %>"
+          data-stale="<%= row.stale ? 'true' : 'false' %>"
+          data-collapsed="<%= expand ? 'false' : 'true' %>"
+        >
+          <button type="button" class="service-summary" aria-expanded="<%= expand ? 'true' : 'false' %>">
+            <span class="service-toggle" aria-hidden="true"><%= expand ? '▾' : '▸' %></span>
+            <span>
+              <h3 class="service-name">Machine</h3>
+              <p class="service-meta">
+                <%= row.service %> · last <%= formatAge(row.ageMs) %>
+              </p>
+            </span>
+            <span class="service-badge"><%= row.overall %></span>
+          </button>
+          <ul class="checks">
+            <% row.checks.forEach(function (c) { %>
+            <li class="check check-<%= c.status %>">
+              <span class="check-status"><%= c.status %></span>
+              <span class="check-name"><%= c.name %></span>
+              <span class="check-msg"><%= c.message %></span>
+            </li>
+            <% }) %>
+          </ul>
+        </section>
+        <% } %>
+
+        <% group.apps.forEach(function (row) {
+          var expand = row.overall === 'fail' || row.overall === 'warn' || row.stale;
+        %>
+        <section
+          class="service overall-<%= row.overall %>"
+          id="svc-<%= row.service %>"
+          data-service="<%= row.service %>"
+          data-host="<%= group.host %>"
+          data-overall="<%= row.overall %>"
+          data-stale="<%= row.stale ? 'true' : 'false' %>"
+          data-collapsed="<%= expand ? 'false' : 'true' %>"
+        >
+          <button type="button" class="service-summary" aria-expanded="<%= expand ? 'true' : 'false' %>">
+            <span class="service-toggle" aria-hidden="true"><%= expand ? '▾' : '▸' %></span>
+            <span>
+              <h3 class="service-name"><%= row.service %></h3>
+              <p class="service-meta">
+                <% if (row.version) { %>v<%= row.version %> · <% } %>
+                last <%= formatAge(row.ageMs) %>
+              </p>
+            </span>
+            <span class="service-badge"><%= row.overall %></span>
+          </button>
+          <ul class="checks">
+            <% row.checks.forEach(function (c) { %>
+            <li class="check check-<%= c.status %>">
+              <span class="check-status"><%= c.status %></span>
+              <span class="check-name"><%= c.name %></span>
+              <span class="check-msg"><%= c.message %></span>
+            </li>
+            <% }) %>
+          </ul>
+        </section>
         <% }) %>
-      </ul>
+      </div>
     </section>
     <% }) %>
   </div>
