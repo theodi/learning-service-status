@@ -330,30 +330,51 @@ describe('checkNpmRuntime', () => {
       npmVersion: '10.9.9',
       nodeVersion: 'v22.23.2',
       npmLatestForMajor: '10.9.9',
+      npmAdvisories: [],
     });
     assert.equal(check.status, 'ok');
     assert.match(check.message, /Node 22/);
   });
 
-  it('fails npm 10.9.8 when 10.9.9 is the current 10.x (security)', async () => {
+  it('warns when a newer patch exists without HIGH/CRITICAL advisories', async () => {
+    const check = await checkNpmRuntime({
+      npmVersion: '11.19.1',
+      nodeVersion: 'v24.0.0',
+      npmLatestForMajor: '11.21.2',
+      npmAdvisories: [],
+    });
+    assert.equal(check.status, 'warn');
+    assert.match(check.message, /newer 11\.x available/);
+    assert.match(check.message, /11\.21\.2/);
+  });
+
+  it('fails when OSV reports a critical advisory for this npm version', async () => {
     const check = await checkNpmRuntime({
       npmVersion: '10.9.8',
       nodeVersion: 'v22.23.2',
       npmLatestForMajor: '10.9.9',
+      npmAdvisories: [
+        {
+          id: 'GHSA-example',
+          summary: 'critical tar in npm',
+          database_specific: { severity: 'CRITICAL' },
+        },
+      ],
     });
     assert.equal(check.status, 'fail');
-    assert.match(check.message, /10\.9\.9/);
-    assert.match(check.message, /security/);
+    assert.match(check.message, /critical|high/i);
+    assert.match(check.message, /GHSA-example/);
   });
 
-  it('fails wrong npm major for Node 22', async () => {
+  it('warns for wrong npm major for Node 22', async () => {
     const check = await checkNpmRuntime({
-      npmVersion: '9.0.0',
+      npmVersion: '8.0.0',
       nodeVersion: 'v22.23.2',
-      npmLatestForMajor: '9.9.4',
+      npmLatestForMajor: '8.19.4',
+      npmAdvisories: [],
     });
-    assert.equal(check.status, 'fail');
-    assert.match(check.message, /stable line/);
+    assert.equal(check.status, 'warn');
+    assert.match(check.message, /usual line/);
   });
 
   it('maps Node 22 to bundled npm 10', () => {

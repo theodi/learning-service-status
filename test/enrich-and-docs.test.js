@@ -93,8 +93,8 @@ describe('enrichReportWithRuntime', () => {
     assert.equal(node.status, 'fail');
     assert.ok(!node.message.includes('stale client claim'));
     assert.ok(enriched.checks.some((c) => c.id === 'up'));
-    // Node 25 expects npm 11.x — npm 9 is the wrong line
-    assert.ok(enriched.checks.some((c) => c.id === 'npm_runtime' && c.status === 'fail'));
+    // Node 25 expects npm 11.x — npm 9 is the wrong line (warn, not fail)
+    assert.ok(enriched.checks.some((c) => c.id === 'npm_runtime' && c.status === 'warn'));
     assert.ok(!enriched.checks.some((c) => c.id === 'operating_system'));
   });
 
