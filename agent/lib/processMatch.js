@@ -5,6 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const { sanitizeCmdline } = require('./sanitizeForReport');
 
 function readProcLinux() {
   const procs = [];
@@ -122,7 +123,12 @@ function matchAppProcess(appDir, options = {}) {
     pid: best.pid,
     nodeVersion,
     exe: best.exe || null,
-    detail: { cmdline: best.cmdline, cwd: best.cwd, score: best.score, exe: best.exe || null },
+    detail: {
+      cwd: best.cwd || null,
+      score: best.score,
+      exe: best.exe || null,
+      cmdline: sanitizeCmdline(best.cmdline),
+    },
   };
 }
 

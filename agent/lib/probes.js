@@ -6,6 +6,7 @@ const {
   getServiceAccountAccessToken,
   refreshOAuth2AccessToken,
 } = require('./googleAccessToken');
+const { safeErrorMessage, redactSecrets } = require('./sanitizeForReport');
 
 const DEFAULT_TIMEOUT_MS = 12000;
 
@@ -78,7 +79,7 @@ async function probeMongo(env, options = {}) {
       await options.mongoPing({ uri, dbName });
       return check('mongodb', 'MongoDB', 'ok', 'ping ok');
     } catch (err) {
-      return check('mongodb', 'MongoDB', 'fail', err.message || String(err), { error: true });
+      return check('mongodb', 'MongoDB', 'fail', safeErrorMessage(err), { error: true });
     }
   }
   try {
@@ -89,7 +90,7 @@ async function probeMongo(env, options = {}) {
     await client.close();
     return check('mongodb', 'MongoDB', 'ok', dbName ? `ping ok (${dbName})` : 'ping ok');
   } catch (err) {
-    return check('mongodb', 'MongoDB', 'fail', err.message || String(err), { error: true });
+    return check('mongodb', 'MongoDB', 'fail', safeErrorMessage(err), { error: true });
   }
 }
 
@@ -112,7 +113,7 @@ async function probeHubspot(env, options = {}) {
     }
     return check('hubspot', 'HubSpot', 'warn', `HTTP ${res.status}`);
   } catch (err) {
-    return check('hubspot', 'HubSpot', 'fail', err.message || String(err), { error: true });
+    return check('hubspot', 'HubSpot', 'fail', safeErrorMessage(err), { error: true });
   }
 }
 
@@ -133,7 +134,7 @@ async function probeForecast(env, options = {}) {
     }
     return check('forecast', 'Forecast', 'warn', `HTTP ${res.status}`);
   } catch (err) {
-    return check('forecast', 'Forecast', 'fail', err.message || String(err), { error: true });
+    return check('forecast', 'Forecast', 'fail', safeErrorMessage(err), { error: true });
   }
 }
 
@@ -164,7 +165,7 @@ async function probeMoodle(env, options = {}) {
     if (body && body.exception) {
       const msg = body.message || body.errorcode || body.exception;
       const failAuth = /invalidtoken|accessexception|nopermission/i.test(String(msg));
-      return check('moodle', 'Moodle', failAuth ? 'fail' : 'warn', String(msg));
+      return check('moodle', 'Moodle', failAuth ? 'fail' : 'warn', redactSecrets(String(msg)));
     }
     if (res.ok && Array.isArray(body)) {
       return check('moodle', 'Moodle', 'ok', `token accepted (${body.length} courses)`);
@@ -175,7 +176,7 @@ async function probeMoodle(env, options = {}) {
     }
     return check('moodle', 'Moodle', 'warn', `HTTP ${res.status}`);
   } catch (err) {
-    return check('moodle', 'Moodle', 'fail', err.message || String(err), { error: true });
+    return check('moodle', 'Moodle', 'fail', safeErrorMessage(err), { error: true });
   }
 }
 
@@ -236,7 +237,7 @@ async function probeAi(env, options = {}) {
     }
     return check(id, name, 'warn', `HTTP ${res.status}`);
   } catch (err) {
-    return check(id, name, 'fail', err.message || String(err), { error: true });
+    return check(id, name, 'fail', safeErrorMessage(err), { error: true });
   }
 }
 
@@ -280,9 +281,14 @@ async function probeGmailInbox(env, options = {}) {
   } catch (err) {
     const status = err.status;
     if (status === 401 || status === 403) {
-      return check('gmail_inbox', 'Gmail inbox', 'fail', err.message || `HTTP ${status}`);
+      return check(
+        'gmail_inbox',
+        'Gmail inbox',
+        'fail',
+        safeErrorMessage(err) || `HTTP ${status}`
+      );
     }
-    return check('gmail_inbox', 'Gmail inbox', 'fail', err.message || String(err), { error: true });
+    return check('gmail_inbox', 'Gmail inbox', 'fail', safeErrorMessage(err), { error: true });
   }
 }
 
@@ -334,9 +340,14 @@ async function probeGoogleCalendar(env, options = {}) {
   } catch (err) {
     const status = err.status;
     if (status === 401 || status === 403) {
-      return check('google_calendar', 'Google Calendar', 'fail', err.message || `HTTP ${status}`);
+      return check(
+        'google_calendar',
+        'Google Calendar',
+        'fail',
+        safeErrorMessage(err) || `HTTP ${status}`
+      );
     }
-    return check('google_calendar', 'Google Calendar', 'fail', err.message || String(err), {
+    return check('google_calendar', 'Google Calendar', 'fail', safeErrorMessage(err), {
       error: true,
     });
   }
@@ -408,7 +419,7 @@ async function probeEmail(env, options = {}) {
       }
       return check('email', 'Email send', 'warn', `OAuth2 HTTP ${res.status}`, { mode: 'oauth2' });
     } catch (err) {
-      return check('email', 'Email send', 'fail', err.message || String(err), {
+      return check('email', 'Email send', 'fail', safeErrorMessage(err), {
         mode: 'oauth2',
         error: true,
       });

@@ -31,6 +31,25 @@ describe('discoverApps', () => {
   });
 });
 
+describe('sanitizeForReport', () => {
+  it('redacts credentials in mongo-style error URIs', () => {
+    const { redactSecrets, safeErrorMessage, sanitizeCmdline } = require('../lib/sanitizeForReport');
+    const raw =
+      'MongoServerError: Authentication failed for mongodb://user:s3cretPass@cluster.example.com:27017/db';
+    const out = safeErrorMessage(new Error(raw));
+    assert.ok(!out.includes('s3cretPass'));
+    assert.match(out, /:\/\/\*\*\*:\*\*\*@/);
+    assert.equal(
+      redactSecrets('failed wstoken=abc123secret&x=1'),
+      'failed wstoken=***&x=1'
+    );
+    const cmd = sanitizeCmdline('node server.js MONGO_URI=mongodb://a:b@h/db --token=supersecretvaluehere');
+    assert.ok(cmd);
+    assert.ok(!cmd.includes('supersecretvaluehere'));
+    assert.ok(!cmd.includes('mongodb://a:b@'));
+  });
+});
+
 describe('processMatch', () => {
   it('matches cwd to app dir', () => {
     const appDir = '/var/www/care.theodi.org';
@@ -38,7 +57,7 @@ describe('processMatch', () => {
       processes: [
         {
           pid: 42,
-          cmdline: 'node server.js',
+          cmdline: 'node server.js --api-key=should-not-leak-this-secret',
           cwd: appDir,
           exe: '/usr/bin/node',
         },
@@ -46,6 +65,8 @@ describe('processMatch', () => {
     });
     assert.equal(out.matched, true);
     assert.equal(out.pid, 42);
+    assert.ok(out.detail.cmdline);
+    assert.ok(!out.detail.cmdline.includes('should-not-leak-this-secret'));
   });
 
   it('returns unmatched when no process', () => {
@@ -134,6 +155,23 @@ describe('env + probes', () => {
       }
     );
     assert.equal(check.status, 'ok');
+  });
+
+  it('redacts mongo URI from probe error messages', async () => {
+    const { probeMongo } = require('../lib/probes');
+    const check = await probeMongo(
+      { MONGO_URI: 'mongodb://user:hunter2@localhost:27017/app' },
+      {
+        mongoPing: async () => {
+          throw new Error(
+            'connect ECONNREFUSED mongodb://user:hunter2@localhost:27017/app'
+          );
+        },
+      }
+    );
+    assert.equal(check.status, 'fail');
+    assert.ok(!check.message.includes('hunter2'));
+    assert.match(check.message, /\*\*\*/);
   });
 
   it('probes email oauth2 via refresh + gmail profile', async () => {
